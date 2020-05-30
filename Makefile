@@ -1,6 +1,6 @@
 CC = g++ -std=c++17
 .DEFAULT_GOAL := Menu
-wrapper = wrapper.cpp
+wrapper = wrapper_concurrent.cpp
 server = server.cpp
 client = client.cpp
 

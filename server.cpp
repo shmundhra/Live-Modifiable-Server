@@ -1,6 +1,6 @@
 #include "livemodifiable.h"
 
-int interrupt;
+int success, failure, interrupt;
 void sig_handler(int signo)
 {
     if (signo == SIGMODIFY)
@@ -15,88 +15,109 @@ void sig_handler(int signo)
 signed main(int argc, char* argv[])
 {
     if (argc < 6) {
-        cerr << "Insufficient CLA Provided" << endl;
+        RED << "Insufficient CLA Provided"; RESET2;
     }
 
+    /* Extract Socket File Descriptor from 1st CLA */
     int socket;
     sscanf(argv[1], "%d", &socket);
 
-    char* filename = new char[FILESIZE];
-    snprintf(filename, FILESIZE, "%s", argv[2]);
-    CYAN cerr << "FILE RECEIVED by Server: " << filename << endl; RESET1
+    /* Extract FileName from 2nd CLA */
+    char filename[FILESIZE+1];
+    bzero(filename, (FILESIZE+1)*sizeof(char));
+    memcpy(filename, argv[2], FILESIZE);
+    BLUE << getpid() << ":: FILE RECEIVED by Server: " << filename; RESET2;
 
-    int offset;
-    sscanf(argv[3], "%d", &offset);
-    CYAN cerr << "OFFSET RECEIVED by Server: " << offset << endl; RESET1
+    /* Extract Offset from where to start File, from 3rd CLA */
+    long long offset;
+    sscanf(argv[3], "%lld", &offset);
+    BLUE << getpid() << ":: OFFSET RECEIVED by Server: " << offset; RESET2;
 
-    int* pipefd = new int[2];
+    /* Extract Pipe File Descriptors to send offset to Parent on Pausing */
+    int pipefd[2];
     sscanf(argv[4], "%d", &pipefd[READ]);
     sscanf(argv[5], "%d", &pipefd[WRITE]);
 
+    /* Install Signal Handlers */
     signal(SIGMODIFY, sig_handler);
     signal(SIGINT, sig_handler);
 
+    /* Open File */
     int fd = open(filename, O_RDONLY);
     if (fd < 0) {
-        RED perror("Error in Opening File"); RESET1
+        RED; perror("Error in Opening File"); RESET1
+        close(pipefd[READ]), close(pipefd[WRITE]);
         close(socket);
         exit(EXIT_FAILURE);
     }
-    lseek(fd, 0, SEEK_SET);
 
-    int read_, total_read;
-    for(total_read = 0; total_read < offset; total_read += read_)
+    char buffer[DATASIZE+1];
+    success = failure = interrupt = 0;
+
+    int file_size = lseek(fd, 0, SEEK_END);
+    if(!(offset < file_size))
     {
-        char* c = new char;
-        if ((read_ = read(fd, c, sizeof(char))) < 0) {
-            RED perror("Error in Reading File"); RESET1
+        GREEN << getpid() << ":: FILE TRANSFER already SUCCESSFUL"; RESET2;
+        sendData(socket, buffer, 0);
 
-            close(fd);
-            close(socket);
-            exit(EXIT_FAILURE);
-        }
-        if (read_ == 0) {
-            GREEN cerr << "File Transfer was Already Completed" << endl; RESET1
+        success = 1;
+    }
+    else
+    {
+        lseek(fd, offset, SEEK_SET);    // Shift to position 'offset' in the file
 
-            close(fd);
-            close(socket);
-            exit(EXIT_SUCCESS);
+        int read_, total_read;
+        while(!interrupt)
+        {
+            bzero(buffer, (DATASIZE+1) * sizeof(char));
+            if ((read_ = read(fd, buffer, DATASIZE)) < 0)
+            {
+                RED; perror("Error in Reading File"); RESET1
+
+                failure = 1;
+                break;
+            }
+            if (read_ == 0)
+            {
+                GREEN << getpid() << ":: File Transfer Complete"; RESET2;
+                sendData(socket, buffer, 0);
+
+                success = 1;
+                break;
+            }
+
+            if (sendData(socket, buffer, read_) < 0)
+            {
+                RED; perror("Error in Sending Data"); RESET1
+
+                failure = 1;
+                break;
+            }
+            sleep(1);
+            offset += read_;
         }
     }
 
-    int send_, total_send;
-    interrupt = 0;
-    while(!interrupt)
+    /* Send 'offset' to wrapper as marker to start transfer in next execvp */
+    if(interrupt == 1)
     {
-        char* buffer = new char[DATASIZE];
-        if ((read_ = read(fd, buffer, DATASIZE)) < 0) {
-            RED perror("Error in Reading File"); RESET1
-            break;
-        }
-        if (read_ == 0) {
-            GREEN cerr << "File Transfer Complete" << endl; RESET1
-            sendData(socket, buffer, read_);
-
-            close(fd);
-            close(socket);
-            exit(EXIT_SUCCESS);
+        if (sendInfo(socket, "Modification Taking Place...") < 0) {
+            RED; perror("Error in Sending Modification Start Message"); RESET1
+            failure = 1;
         }
 
-        if ((send_ = sendData(socket, buffer, read_)) < 0) {
-            RED perror("Error in Sending Data"); RESET1
-            break;
-        }
-        sleep(3);
-        offset += read_;
+        char offset_Str[LLSIZE];
+        snprintf(offset_Str, LLSIZE, "%lld", offset);
+
+        close(pipefd[READ]);
+        write(pipefd[WRITE], offset_Str, LLSIZE);
+        close(pipefd[WRITE]);
     }
 
-    char* offset_Str = new char[LLSIZE];
-    snprintf(offset_Str, LLSIZE, "%d", offset);
+    close(pipefd[READ]), close(pipefd[WRITE]);
+    close(fd), close(socket);
 
-    close(pipefd[READ]);
-    write(pipefd[WRITE], offset_Str, LLSIZE);
-    close(pipefd[WRITE]);
-
-    close(fd);
-    exit(EXIT_FAILURE);
+    if(success == 1) exit(EXIT_SUCCESS);
+    if(failure == 1) exit(EXIT_FAILURE);
+    if(interrupt == 1) exit(EXIT_PAUSED);
 }

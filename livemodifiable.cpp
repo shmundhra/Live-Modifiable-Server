@@ -6,8 +6,8 @@ Data::Data(PacketType packet_type, int packet_len, char* packet_data)
     type = htonl(PacketType(packet_type));
     len = htonl(int(packet_len));
 
-    memset(data, 0, DATASIZE);
-    snprintf(data, DATASIZE, "%s", packet_data);
+    bzero(data, DATASIZE * sizeof(char));
+    memcpy(data, packet_data, packet_len);
 }
 
 Error::Error() = default;
@@ -16,18 +16,18 @@ Error::Error(PacketType packet_type, int packet_len, char* packet_msg)
     type = htonl(PacketType(packet_type));
     len = htonl(int(packet_len));
 
-    memset(msg, 0, ERRSIZE);
-    snprintf(msg, ERRSIZE, "%s", packet_msg);
+    bzero(msg, ERRSIZE * sizeof(char));
+    memcpy(msg, packet_msg, packet_len);
 }
 
 Info::Info() = default;
-Info::Info(PacketType packet_type, int packet_len, char* packet_msg) 
+Info::Info(PacketType packet_type, int packet_len, char* packet_msg)
 {
     type = htonl(PacketType(packet_type));
     len = htonl(int(packet_len));
 
-    memset(msg, 0, INFOSIZE);
-    snprintf(msg, INFOSIZE, "%s", packet_msg);
+    bzero(msg, INFOSIZE * sizeof(char));
+    memcpy(msg, packet_msg, packet_len);
 }
 
 ostream& operator <<(ostream& os, PacketType& packet_type)
@@ -48,7 +48,8 @@ int assignType(PacketType& packet_type, int type)
         case 1: packet_type = PacketType(PacketType::ERROR); break;
         case 2: packet_type = PacketType(PacketType::DATA);  break;
         case 4: packet_type = PacketType(PacketType::INFO);  break;
-        default: return -1;
+        default: RED << "Can't recognize packet type - " << type; RESET2;
+                 return -1;
     }
     return 0;
 }
@@ -60,18 +61,10 @@ int recvType(const int& socket, PacketType& packet_type)
     if (recv(socket, reinterpret_cast<void*>(&type), sizeof(int), MSG_WAITALL) < 0) {
         return -1;
     }
-    if (type == 0) {
-        if (recv(socket, reinterpret_cast<void*>(&type), sizeof(short), MSG_WAITALL) < 0) {
-            return -1;
-        }
-        type <<= 16;
-    }
-    CYAN cerr << "Received Packet of Type: " << ntohl(type) << endl; RESET1
-
     if (assignType(packet_type, ntohl(type)) < 0) {
         return -1;
     }
-    CYAN cerr << "Received Packet of Type: " << packet_type << endl; RESET1
+    CYAN << getpid() << ":: Received Packet of Type: "; BLUE << packet_type; RESET2;
 
     return sizeof(type);
 }
@@ -82,12 +75,12 @@ int recvInfo(const int& socket, char* info_msg)
     if (recv(socket, reinterpret_cast<void*>(&len), sizeof(int), MSG_WAITALL) < 0) {
         return -1;
     }
-    CYAN cerr << "Received Info Packet of Length: " << ntohl(len) << endl; RESET1
+    CYAN << getpid() << ":: Received Info Packet of Length: "; BLUE << ntohl(len); RESET2;
 
     if (recv(socket, reinterpret_cast<void*>(info_msg), INFOSIZE, MSG_WAITALL) < 0) {
         return -1;
     }
-    CYAN cerr << "Received Info Packet of Message: " << info_msg << endl; RESET1
+    CYAN << getpid() << ":: Received Info Packet of Message: "; BLUE << info_msg; RESET2;
 
     return ntohl(len);
 }
@@ -98,12 +91,12 @@ int recvData(const int& socket, char* data)
     if (recv(socket, reinterpret_cast<void*>(&len), sizeof(int), MSG_WAITALL) < 0) {
         return -1;
     }
-    CYAN cerr << "Received Data Packet of Length: " << ntohl(len) << endl; RESET1
+    CYAN << getpid() << ":: Received Data Packet of Length: "; BLUE << ntohl(len); RESET2;
 
     if (recv(socket, reinterpret_cast<void*>(data), DATASIZE, MSG_WAITALL) < 0) {
         return -1;
     }
-    CYAN cerr << "Received Data Packet:\n" << data << endl; RESET1
+    CYAN << getpid() << ":: Received Data Packet:\n"; BLUE << data; RESET2;
 
     return ntohl(len);
 }
@@ -115,12 +108,12 @@ int sendInfo(const int& socket, char* info_msg)
     int send_ = 0;
     for(int total_send = 0; total_send < sizeof(Info); total_send += send_)
     {
-        if ((send_ = send(socket, reinterpret_cast<void*>(info_packet + total_send),
+        if ((send_ = send(socket, reinterpret_cast<void*>((char*)info_packet + total_send),
                           sizeof(Info)-total_send, 0)) < 0) {
             return -1;
         }
     }
-    CYAN cerr << "Sent Info Packet: " << info_msg << endl; RESET1
+    CYAN << getpid() << ":: Sent Info Packet: "; BLUE << info_msg; RESET2;
     return strlen(info_msg);
 }
 
@@ -131,11 +124,11 @@ int sendData(const int& socket, char* data, int len)
     int send_ = 0;
     for(int total_send = 0; total_send < sizeof(Data); total_send += send_)
     {
-        if ((send_ = send(socket, reinterpret_cast<void*>(data_packet + total_send),
+        if ((send_ = send(socket, reinterpret_cast<void*>((char*)data_packet + total_send),
                           sizeof(Data)-total_send, 0)) < 0) {
             return -1;
         }
     }
-    CYAN cerr << "Sent Data Packet of Length: " << len << endl; RESET1
+    CYAN << getpid() << ":: Sent Data Packet of Length: "; BLUE << len; RESET2;
     return len;
 }

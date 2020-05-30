@@ -15,30 +15,31 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <signal.h>
+#include <errno.h>
 #include <bits/stdc++.h>
 using namespace std;
 
-#define PORT 12345
+#define PORT 10001
 #define SIGMODIFY SIGUSR1
+#define EXIT_PAUSED 10
 #define READ 0
 #define WRITE 1
 #define LLSIZE sizeof(long long)
-#define ERRSIZE 50
-#define INFOSIZE 50
-#define FILESIZE 50
+#define ERRSIZE 52
+#define INFOSIZE 52
+#define FILESIZE 52
 #define DATASIZE 200
 
-#define BLACK cerr<<"\033[1;30m";
-#define RED cerr<<"\033[1;31m";
-#define GREEN cerr<<"\033[1;32m";
-#define YELLOW cerr<<"\033[1;33m";
-#define BLUE cerr<<"\033[1;34m";
-#define MAGENTA cerr<<"\033[1;35m";
-#define CYAN cerr<<"\033[1;36m";
-#define WHITE cerr<<"\033[1;37m";
-#define RESET1 cerr<<"\033[0m"; cerr.flush();
-#define RESET2 cerr<<"\033[0m"; cerr << endl;
-
+#define BLACK   cerr << "\033[1;30m"
+#define RED     cerr << "\033[1;31m"
+#define GREEN   cerr << "\033[1;32m"
+#define YELLOW  cerr << "\033[1;33m"
+#define BLUE    cerr << "\033[1;34m"
+#define MAGENTA cerr << "\033[1;35m"
+#define CYAN    cerr << "\033[1;36m"
+#define WHITE   cerr << "\033[1;37m"
+#define RESET1  cerr << "\033[0m";   cerr.flush();
+#define RESET2  cerr << "\033[0m";   cerr << endl;
 
 enum PacketType {
     ERROR = 1,
