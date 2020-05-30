@@ -51,8 +51,9 @@ signed main(int argc, char* argv[])
                                     }
 
             case PacketType::DATA : {
+                                        int offset;
                                         char* data = (char*)calloc(DATASIZE+1, sizeof(char));
-                                        if ((recv_ = recvData(socket_fd, data)) < 0)
+                                        if ((recv_ = recvData(socket_fd, &offset, data)) < 0)
                                         {
                                             RED; perror("Error in Receiving Data Packet"); RESET1
                                             exit(EXIT_FAILURE);

@@ -19,11 +19,12 @@ Menu	:
 	@echo ""
 
 All	:	Library Wrapper Server Client
-	@echo "All Set for Action"
+	@echo ""
+	@echo "ALL SET FOR ACTION !!!"
+	@echo ""
 
 Wrapper		: LM_Server
-	@echo ""
-	@echo ">>\"./lm_server.o ./server.o \" TO START LM_Server Wrapper over server.o "
+	@echo "BINARIES CREATED >> \"./lm_server.o ./server.o\" TO START LM_Server Wrapper over server.o "
 	@echo ""
 
 LM_Server 	:	liblms.a
@@ -36,16 +37,14 @@ Client  :
 	$(CC) -o client.o $(client) -L. -llms
 
 Library :	liblms.a
-	@echo ""
-	@echo ">>\"CC -o <lm_server>.o <wrapper>.cpp -L. -llms \" TO COMPILE A PROGRAM"
+	@echo "LIBRARY CREATED >> \"CC -o <lm_server>.o <wrapper>.cpp -L. -llms\" TO COMPILE A PROGRAM"
 	@echo ""
 
 liblms.a	:	livemodifiable.o
 	ar rcs liblms.a livemodifiable.o
 
 Header	:	livemodifiable.o
-	@echo ""
-	@echo ">>\"ar rcs lib<lms>.a livemodifiable.o\" TO CREATE STATIC LIBRARY"
+	@echo "HEADER CREATED >> \"\ar rcs lib<lms>.a livemodifiable.o\" TO CREATE STATIC LIBRARY"
 	@echo ""
 
 livemodifiable.o	:	livemodifiable.cpp	livemodifiable.h

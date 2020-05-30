@@ -1,10 +1,11 @@
 #include "livemodifiable.h"
 
 Data::Data() = default;
-Data::Data(PacketType packet_type, int packet_len, char* packet_data)
+Data::Data(PacketType packet_type, int packet_len, int packet_offset, char* packet_data)
 {
     type = htonl(PacketType(packet_type));
-    len = htonl(int(packet_len));
+    len = htonl(packet_len);
+    offset = htonl(packet_offset);
 
     bzero(data, DATASIZE * sizeof(char));
     memcpy(data, packet_data, packet_len);
@@ -14,7 +15,7 @@ Error::Error() = default;
 Error::Error(PacketType packet_type, int packet_len, char* packet_msg)
 {
     type = htonl(PacketType(packet_type));
-    len = htonl(int(packet_len));
+    len = htonl(packet_len);
 
     bzero(msg, ERRSIZE * sizeof(char));
     memcpy(msg, packet_msg, packet_len);
@@ -24,7 +25,7 @@ Info::Info() = default;
 Info::Info(PacketType packet_type, int packet_len, char* packet_msg)
 {
     type = htonl(PacketType(packet_type));
-    len = htonl(int(packet_len));
+    len = htonl(packet_len);
 
     bzero(msg, INFOSIZE * sizeof(char));
     memcpy(msg, packet_msg, packet_len);
@@ -85,7 +86,7 @@ int recvInfo(const int& socket, char* info_msg)
     return ntohl(len);
 }
 
-int recvData(const int& socket, char* data)
+int recvData(const int& socket, int* offset, char* data)
 {
     int len;
     if (recv(socket, reinterpret_cast<void*>(&len), sizeof(int), MSG_WAITALL) < 0) {
@@ -93,10 +94,14 @@ int recvData(const int& socket, char* data)
     }
     CYAN << getpid() << ":: Received Data Packet of Length: "; BLUE << ntohl(len); RESET2;
 
+    if (recv(socket, reinterpret_cast<void*>(offset), sizeof(int), MSG_WAITALL) < 0) {
+        return -1;
+    }
     if (recv(socket, reinterpret_cast<void*>(data), DATASIZE, MSG_WAITALL) < 0) {
         return -1;
     }
-    CYAN << getpid() << ":: Received Data Packet:\n"; BLUE << data; RESET2;
+    CYAN << getpid() << ":: Received Data Packet at Offset: ";
+    BLUE << ntohl(*offset) << "\n" << data; RESET2;
 
     return ntohl(len);
 }
@@ -117,9 +122,9 @@ int sendInfo(const int& socket, char* info_msg)
     return strlen(info_msg);
 }
 
-int sendData(const int& socket, char* data, int len)
+int sendData(const int& socket, int len, int offset, char* data)
 {
-    Data* data_packet = new Data(PacketType::DATA, len, data);
+    Data* data_packet = new Data(PacketType::DATA, len, offset, data);
 
     int send_ = 0;
     for(int total_send = 0; total_send < sizeof(Data); total_send += send_)
@@ -129,6 +134,7 @@ int sendData(const int& socket, char* data, int len)
             return -1;
         }
     }
-    CYAN << getpid() << ":: Sent Data Packet of Length: "; BLUE << len; RESET2;
+    CYAN << getpid() << ":: Sent Data Packet of Length: ";
+    BLUE << len << " at Offset: " << offset; RESET2;
     return len;
 }

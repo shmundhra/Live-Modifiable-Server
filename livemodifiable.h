@@ -19,7 +19,7 @@
 #include <bits/stdc++.h>
 using namespace std;
 
-#define PORT 10001
+#define PORT 10002
 #define SIGMODIFY SIGUSR1
 #define EXIT_PAUSED 10
 #define READ 0
@@ -50,10 +50,11 @@ enum PacketType {
 struct Data {
     int type;
     int len;
+    int offset;
     char data[DATASIZE];
 
     Data();
-    Data(PacketType packet_type, int packet_len, char* packet_data);
+    Data(PacketType packet_type, int packet_len, int packet_offset, char* packet_data);
 };
 
 struct Error {
@@ -82,10 +83,10 @@ int recvType(const int& socket, PacketType& packet_type);
 
 int recvInfo(const int& socket, char* info_msg);
 
-int recvData(const int& socket, char* data);
+int recvData(const int& socket, int *offset, char* data);
 
 int sendInfo(const int& socket, char* info_msg);
 
-int sendData(const int& socket, char* data, int len);
+int sendData(const int& socket, int len, int offset, char* data);
 
 #endif

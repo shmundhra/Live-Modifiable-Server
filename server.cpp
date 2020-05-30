@@ -58,7 +58,7 @@ signed main(int argc, char* argv[])
     if(!(offset < file_size))
     {
         GREEN << getpid() << ":: FILE TRANSFER already SUCCESSFUL"; RESET2;
-        sendData(socket, buffer, 0);
+        sendData(socket, 0, offset, buffer);
 
         success = 1;
     }
@@ -80,13 +80,13 @@ signed main(int argc, char* argv[])
             if (read_ == 0)
             {
                 GREEN << getpid() << ":: File Transfer Complete"; RESET2;
-                sendData(socket, buffer, 0);
+                sendData(socket, 0, offset, buffer);
 
                 success = 1;
                 break;
             }
 
-            if (sendData(socket, buffer, read_) < 0)
+            if (sendData(socket, read_, offset, buffer) < 0)
             {
                 RED; perror("Error in Sending Data"); RESET1
 
@@ -101,7 +101,7 @@ signed main(int argc, char* argv[])
     /* Send 'offset' to wrapper as marker to start transfer in next execvp */
     if(interrupt == 1)
     {
-        if (sendInfo(socket, "Modification Taking Place...") < 0) {
+        if (sendInfo(socket, (char*)string("Modification Taking Place...").c_str()) < 0) {
             RED; perror("Error in Sending Modification Start Message"); RESET1
             failure = 1;
         }
