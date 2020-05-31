@@ -70,27 +70,27 @@ signed main(int argc, char* argv[])
 
     int listening_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (listening_socket < 0) {
-        RED; perror("Error in Creating Listening Socket"); RESET1
+        RED << getpid() << ":: "; perror("Error in Creating Listening Socket"); RESET1
         exit(EXIT_FAILURE);
     }
     /*
     const int enable = 1;
     if (setsockopt(listening_socket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable)) < 0) {
-        RED; perror("Error in setting socket option to enable Reuse of Address"); RESET1
+        RED << getpid() << ":: "; perror("Error in setting socket option to enable Reuse of Address"); RESET1
     }
     if (setsockopt(listening_socket, SOL_SOCKET, SO_REUSEPORT, &enable, sizeof(enable)) < 0) {
-        RED; perror("Error in setting socket option to enable Reuse of Port"); RESET1
+        RED << getpid() << ":: "; perror("Error in setting socket option to enable Reuse of Port"); RESET1
     }*/
     
     sockaddr_in serv_addr = {AF_INET, htons(PORT), inet_addr("127.0.0.1"), sizeof(sockaddr_in)};
     serv_addr.sin_addr.s_addr = INADDR_ANY;
     if (bind(listening_socket, reinterpret_cast<struct sockaddr *>(&serv_addr), sizeof(serv_addr)) < 0) {
-        RED; perror("Error in binding Listening Socket"); RESET1
+        RED << getpid() << ":: "; perror("Error in binding Listening Socket"); RESET1
         exit(EXIT_FAILURE);
     }
 
     if (listen(listening_socket, 10) < 0) {
-        RED; perror("Error in Listening on Listening Socket"); RESET1
+        RED << getpid() << ":: "; perror("Error in Listening on Listening Socket"); RESET1
         exit(EXIT_FAILURE);
     }
 
@@ -104,7 +104,7 @@ signed main(int argc, char* argv[])
                                           reinterpret_cast<sockaddr*>(&cli_addr),
                                           &cli_len)) < 0)
             {
-                RED; perror("Error in Accepting Incoming Connection"); RESET1
+                RED << getpid() << ":: "; perror("Error in Accepting Incoming Connection"); RESET1
             }
         }while(connection_socket < 0);
 
@@ -131,7 +131,7 @@ signed main(int argc, char* argv[])
             /* Receive Info Packet Header */
             PacketType packet_type;
             if (recvType(connection_socket, packet_type) < 0) {
-                RED; perror("Error in Receiving Packet Type"); RESET1
+                RED << getpid() << ":: "; perror("Error in Receiving Packet Type"); RESET1
                 exit(EXIT_FAILURE);
             }
             if (packet_type != PacketType::INFO) {
@@ -143,7 +143,7 @@ signed main(int argc, char* argv[])
             char filename[INFOSIZE+1];
             bzero(filename, (INFOSIZE+1) * sizeof(char));
             if (recvInfo(connection_socket, filename) < 0) {
-                RED; perror("Error in Receiving Info Packet"); RESET1
+                RED << getpid() << ":: "; perror("Error in Receiving Info Packet"); RESET1
                 exit(EXIT_FAILURE);
             }
 
@@ -169,6 +169,10 @@ signed main(int argc, char* argv[])
                                     };
                     execvp(argv[0], argv);
                     RED << "execvp() has Returned"; RESET2;
+                    if (sendError(connection_socket, (char*)string("Server Failed").c_str()) < 0){
+                        RED << getpid() << ":: "; perror("Error in Sending Error Message"); RESET2;
+                    }
+                    exit(EXIT_FAILURE);
                 }
                 else
                 {   

@@ -19,7 +19,7 @@
 #include <bits/stdc++.h>
 using namespace std;
 
-#define PORT 10002
+#define PORT 10015
 #define SIGMODIFY SIGUSR1
 #define EXIT_PAUSED 10
 #define READ 0
@@ -78,15 +78,14 @@ struct Info {
 ostream& operator <<(ostream& os, PacketType& packet_type);
 
 int assignType(PacketType& packet_type, int type);
-
 int recvType(const int& socket, PacketType& packet_type);
 
+int recvError(const int& socket, char* error_msg);
 int recvInfo(const int& socket, char* info_msg);
-
 int recvData(const int& socket, int *offset, char* data);
 
+int sendError(const int& socket, char* error_msg);
 int sendInfo(const int& socket, char* info_msg);
-
 int sendData(const int& socket, int len, int offset, char* data);
 
 #endif

@@ -26,7 +26,7 @@ signed main(int argc, char* argv[])
     char filename[FILESIZE+1];
     bzero(filename, (FILESIZE+1)*sizeof(char));
     memcpy(filename, argv[2], FILESIZE);
-    BLUE << getpid() << ":: FILE RECEIVED by Server: " << filename; RESET2;
+    BLUE << getpid() << ":: FILENAME RECEIVED by Server: " << filename; RESET2;
 
     /* Extract Offset from where to start File, from 3rd CLA */
     long long offset;
@@ -45,7 +45,10 @@ signed main(int argc, char* argv[])
     /* Open File */
     int fd = open(filename, O_RDONLY);
     if (fd < 0) {
-        RED; perror("Error in Opening File"); RESET1
+        RED << getpid() << ":: "; perror("Error in Opening File"); RESET1
+        if (sendError(socket, (char*)string("Error in Opening File").c_str()) < 0) {
+            RED << getpid() << ":: "; perror("Error in Sending Error Message"); RESET1
+        }
         close(pipefd[READ]), close(pipefd[WRITE]);
         close(socket);
         exit(EXIT_FAILURE);
@@ -57,10 +60,13 @@ signed main(int argc, char* argv[])
     int file_size = lseek(fd, 0, SEEK_END);
     if(!(offset < file_size))
     {
-        GREEN << getpid() << ":: FILE TRANSFER already SUCCESSFUL"; RESET2;
-        sendData(socket, 0, offset, buffer);
-
-        success = 1;
+        if (sendData(socket, 0, offset, buffer) < 0){
+            RED << getpid() << ":: "; perror("Error in Sending Data"); RESET1
+            failure = 1;
+        } else {
+            GREEN << getpid() << ":: FILE TRANSFER already SUCCESSFUL"; RESET2;
+            success = 1;
+        }
     }
     else
     {
@@ -72,24 +78,27 @@ signed main(int argc, char* argv[])
             bzero(buffer, (DATASIZE+1) * sizeof(char));
             if ((read_ = read(fd, buffer, DATASIZE)) < 0)
             {
-                RED; perror("Error in Reading File"); RESET1
-
+                RED << getpid() << ":: "; perror("Error in Reading File"); RESET1
+                if (sendError(socket, (char*)string("Error in Reading File").c_str()) < 0) {
+                    RED << getpid() << ":: "; perror("Error in Sending Error Message"); RESET1
+                }
                 failure = 1;
                 break;
             }
             if (read_ == 0)
-            {
-                GREEN << getpid() << ":: File Transfer Complete"; RESET2;
-                sendData(socket, 0, offset, buffer);
-
-                success = 1;
+            {   
+                if (sendData(socket, 0, offset, buffer) < 0){
+                    RED << getpid() << ":: "; perror("Error in Sending Data"); RESET1
+                    failure = 1;
+                } else {
+                    GREEN << getpid() << ":: File Transfer Complete"; RESET2;
+                    success = 1;
+                }
                 break;
             }
-
             if (sendData(socket, read_, offset, buffer) < 0)
             {
-                RED; perror("Error in Sending Data"); RESET1
-
+                RED << getpid() << ":: "; perror("Error in Sending Data"); RESET1
                 failure = 1;
                 break;
             }
@@ -102,7 +111,7 @@ signed main(int argc, char* argv[])
     if(interrupt == 1)
     {
         if (sendInfo(socket, (char*)string("Modification Taking Place...").c_str()) < 0) {
-            RED; perror("Error in Sending Modification Start Message"); RESET1
+            RED << getpid() << ":: "; perror("Error in Sending Modification Start Message"); RESET1
             failure = 1;
         }
 
@@ -117,7 +126,7 @@ signed main(int argc, char* argv[])
     close(pipefd[READ]), close(pipefd[WRITE]);
     close(fd), close(socket);
 
-    if(success == 1) exit(EXIT_SUCCESS);
     if(failure == 1) exit(EXIT_FAILURE);
     if(interrupt == 1) exit(EXIT_PAUSED);
+    if(success == 1) exit(EXIT_SUCCESS);
 }

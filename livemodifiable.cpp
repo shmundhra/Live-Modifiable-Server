@@ -70,6 +70,22 @@ int recvType(const int& socket, PacketType& packet_type)
     return sizeof(type);
 }
 
+int recvError(const int& socket, char* error_msg)
+{
+    int len;
+    if (recv(socket, reinterpret_cast<void*>(&len), sizeof(int), MSG_WAITALL) < 0) {
+        return -1;
+    }
+    CYAN << getpid() << ":: Received Error Packet of Length: "; BLUE << ntohl(len); RESET2;
+
+    if (recv(socket, reinterpret_cast<void*>(error_msg), ERRSIZE, MSG_WAITALL) < 0) {
+        return -1;
+    }
+    CYAN << getpid() << ":: Received Error Packet of Message: "; RED << error_msg; RESET2;
+
+    return ntohl(len);
+}
+
 int recvInfo(const int& socket, char* info_msg)
 {
     int len;
@@ -106,6 +122,22 @@ int recvData(const int& socket, int* offset, char* data)
     return ntohl(len);
 }
 
+int sendError(const int& socket, char* error_msg)
+{
+    Error* error_packet = new Error(PacketType::ERROR, strlen(error_msg), error_msg);
+
+    int send_ = 0;
+    for(int total_send = 0; total_send < sizeof(Error); total_send += send_)
+    {
+        if ((send_ = send(socket, reinterpret_cast<void*>((char*)error_packet + total_send),
+                          sizeof(Error)-total_send, 0)) < 0) {
+            return -1;
+        }
+    }
+    CYAN << getpid() << ":: Sent Error Packet: "; RED << error_msg; RESET2;
+    return strlen(error_msg);
+}
+
 int sendInfo(const int& socket, char* info_msg)
 {
     Info* info_packet = new Info(PacketType::INFO, strlen(info_msg), info_msg);
@@ -128,13 +160,13 @@ int sendData(const int& socket, int len, int offset, char* data)
 
     int send_ = 0;
     for(int total_send = 0; total_send < sizeof(Data); total_send += send_)
-    {
-        if ((send_ = send(socket, reinterpret_cast<void*>((char*)data_packet + total_send),
-                          sizeof(Data)-total_send, 0)) < 0) {
+    {       
+        if((send_ = send(socket, reinterpret_cast<void*>((char*)data_packet + total_send),
+                         sizeof(Data)-total_send, 0))< 0) {
             return -1;
         }
     }
     CYAN << getpid() << ":: Sent Data Packet of Length: ";
-    BLUE << len << " at Offset: " << offset; RESET2;
+    BLUE << len; CYAN << " at Offset: "; BLUE << offset; RESET2;
     return len;
 }
