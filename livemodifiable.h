@@ -19,7 +19,7 @@
 #include <bits/stdc++.h>
 using namespace std;
 
-#define PORT 10015
+#define PORT 10000
 #define SIGMODIFY SIGUSR1
 #define EXIT_PAUSED 10
 #define READ 0

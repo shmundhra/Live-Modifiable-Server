@@ -20,13 +20,18 @@ signed main(int argc, char* argv[])
     }
     string FileName(argv[1]);
 
+    string IP_ADDRESS("127.0.0.1");
+    if (argc >= 3) {
+        IP_ADDRESS = argv[2];
+    }
+
     int socket_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (socket_fd < 0) {
         RED << getpid() << ":: "; perror("Error in Creating Connection Socket"); RESET1
         exit(EXIT_FAILURE);
     }
 
-    sockaddr_in serv_addr = {AF_INET, htons(PORT), inet_addr("127.0.0.1"), sizeof(sockaddr_in)};
+    sockaddr_in serv_addr = {AF_INET, htons(PORT), inet_addr(IP_ADDRESS.c_str()), sizeof(sockaddr_in)};
 
     if (connect(socket_fd, reinterpret_cast<sockaddr*>(&serv_addr), sizeof(serv_addr)) < 0) {
         RED << getpid() << ":: "; perror("Error in Connecting to TCP Server"); RESET1
