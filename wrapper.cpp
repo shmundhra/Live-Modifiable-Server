@@ -182,8 +182,8 @@ signed main(int argc, char* argv[])
                                 close(pipe_fd[WRITE]);
                                 kill(data_channel, SIGMODIFY);
 
-                                char *offset_Str = new char[LLSIZE];
-                                read(pipe_fd[READ], offset_Str, LLSIZE);
+                                char *offset_Str = new char[BUFFSIZE];
+                                read(pipe_fd[READ], offset_Str, BUFFSIZE);
                                 close(pipe_fd[READ]);
 
                                 // Wait for the child to finish main.

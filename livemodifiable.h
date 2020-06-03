@@ -19,12 +19,12 @@
 #include <bits/stdc++.h>
 using namespace std;
 
-#define PORT 11002
+#define PORT 11116
 #define SIGMODIFY SIGUSR1
 #define EXIT_PAUSED 10
 #define READ 0
 #define WRITE 1
-#define LLSIZE sizeof(int)
+#define BUFFSIZE 10
 #define ERRSIZE 52
 #define INFOSIZE 52
 #define FILESIZE 52

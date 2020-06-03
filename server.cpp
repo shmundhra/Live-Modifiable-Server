@@ -1,7 +1,7 @@
 #include "livemodifiable.h"
 
-int success, failure, interrupt;
-void sig_handler(int signo)
+static volatile sig_atomic_t success, failure, interrupt;
+static void sig_handler(int signo)
 {
     if (signo == SIGMODIFY)
     {
@@ -151,11 +151,11 @@ signed main(int argc, char* argv[])
             failure = 1;
         }
 
-        char offset_Str[LLSIZE];
-        snprintf(offset_Str, LLSIZE, "%d", offset);
+        char offset_Str[BUFFSIZE+1];
+        snprintf(offset_Str, BUFFSIZE+1, "%d", offset);
 
         close(pipefd[READ]);
-        write(pipefd[WRITE], offset_Str, LLSIZE);
+        write(pipefd[WRITE], offset_Str, BUFFSIZE);
         close(pipefd[WRITE]);
     }
 

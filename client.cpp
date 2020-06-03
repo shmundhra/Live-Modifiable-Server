@@ -1,7 +1,7 @@
 #include "livemodifiable.h"
 
-int terminate_;
-void sig_handler(int signo)
+static volatile sig_atomic_t terminate_;
+static void sig_handler(int signo)
 {
     if(signo == SIGINT)
     {

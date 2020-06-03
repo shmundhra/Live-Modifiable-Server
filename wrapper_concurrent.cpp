@@ -2,15 +2,11 @@
 
 pid_t conn_channel, data_channel;
 
-int open_for_signal;
-int interrupt;
-int server_terminate, server_success, server_failure, server_paused;
-int server_modifying;
-
-void child_sig_handler(int signo)
+static volatile sig_atomic_t interrupt;
+static volatile sig_atomic_t server_terminate, server_success, server_failure, server_paused;
+static volatile sig_atomic_t server_modifying;
+static void child_sig_handler(int signo)
 {
-    if(open_for_signal == 0) return;
-
     interrupt = 1;
     if (signo == SIGCHLD)
     {
@@ -37,13 +33,11 @@ void child_sig_handler(int signo)
     }
 }
 
-void par_sig_handler(int signo)
+static void par_sig_handler(int signo)
 {
-    if(open_for_signal == 0) return;
-
     if (signo == SIGCHLD)
     {
-        pid_t connection = wait(NULL);
+        // pid_t connection = wait(NULL);
     }
     if (signo == SIGINT)
     {
@@ -53,27 +47,26 @@ void par_sig_handler(int signo)
 
 signed main(int argc, char* argv[])
 {
-    open_for_signal = 0;
-
     if (argc < 2) {
         RED << "Please Enter Path of Server Executable"; RESET2;
         exit(EXIT_FAILURE);
     }
     string executable(argv[1]);
 
-    signal(SIGINT, par_sig_handler);
-    signal(SIGCHLD, par_sig_handler);
+    /* Set SIGINT to get ignored in the beginning */
+    signal(SIGINT, SIG_IGN);
 
     int connection_socket;
     sockaddr_in cli_addr;
-    socklen_t cli_len;
+    socklen_t cli_len = sizeof(sockaddr_in);
+    map <pid_t, sockaddr_in> connection_directory;
 
     int listening_socket = socket(AF_INET, SOCK_STREAM, 0);
     if (listening_socket < 0) {
         RED << getpid() << ":: "; perror("Error in Creating Listening Socket"); RESET1
         exit(EXIT_FAILURE);
     }
-    
+
     const int enable = 1;
     if (setsockopt(listening_socket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable)) < 0) {
         RED << getpid() << ":: "; perror("Error in setting socket option to enable Reuse of Address"); RESET1
@@ -81,7 +74,7 @@ signed main(int argc, char* argv[])
     if (setsockopt(listening_socket, SOL_SOCKET, SO_REUSEPORT, &enable, sizeof(enable)) < 0) {
         RED << getpid() << ":: "; perror("Error in setting socket option to enable Reuse of Port"); RESET1
     }
-    
+
     sockaddr_in serv_addr = {AF_INET, htons(PORT), inet_addr("127.0.0.1"), sizeof(sockaddr_in)};
     serv_addr.sin_addr.s_addr = INADDR_ANY;
     if (bind(listening_socket, reinterpret_cast<struct sockaddr *>(&serv_addr), sizeof(serv_addr)) < 0) {
@@ -94,19 +87,23 @@ signed main(int argc, char* argv[])
         exit(EXIT_FAILURE);
     }
 
-    open_for_signal = 1;
+    /* Install Signal Handlers for SIGINT and SIGCHLD */
+    signal(SIGINT, par_sig_handler);
+    signal(SIGCHLD, par_sig_handler);
+
     server_modifying = 0;
     while(1)
     {
         WHITE << getpid() << ":: Waiting for NEW CONNECTIONS..."; RESET2;
         do {
             if((connection_socket = accept(listening_socket,
-                                          reinterpret_cast<sockaddr*>(&cli_addr),
-                                          &cli_len)) < 0)
+                                           reinterpret_cast<sockaddr*>(&cli_addr),
+                                           &cli_len)) < 0)
             {
                 RED << getpid() << ":: "; perror("Error in Accepting Incoming Connection"); RESET1
             }
-        }while(connection_socket < 0);
+        }
+        while(connection_socket < 0);
 
         if (server_modifying){
             WHITE << getpid() << ":: Server MODIFYING, Connection QUEUED.."; RESET2;
@@ -118,15 +115,12 @@ signed main(int argc, char* argv[])
         conn_channel = fork();
         if (conn_channel == 0)
         {
-            open_for_signal = 0;
+            /* Set SIGINT to get ignored in the beginning */
+            signal(SIGINT, SIG_IGN);
 
             GREEN << getpid() << ":: CLIENT @ "
                   << inet_ntoa(cli_addr.sin_addr) << "::" << ntohs(cli_addr.sin_port)
                   << " CONNECTED"; RESET2;
-
-            signal(SIGMODIFY, child_sig_handler);
-            signal(SIGCHLD, child_sig_handler);
-            signal(SIGINT, child_sig_handler);
 
             /* Receive Info Packet Header */
             PacketType packet_type;
@@ -147,13 +141,17 @@ signed main(int argc, char* argv[])
                 exit(EXIT_FAILURE);
             }
 
+            /* Install Signal Handlers for SIGINT and SIGCHLD */
+            signal(SIGINT, child_sig_handler);
+            signal(SIGCHLD, child_sig_handler);
+
+            /* Start Data Transfer by spawning Data Channel */
             int offset = 0;
             server_success = 0;
             while(!server_success and !server_failure)
             {
                 int pipe_fd[2]; pipe(pipe_fd);
 
-                open_for_signal = 1;
                 /************************FORKING DATA CHANNEL******************************/
                 data_channel = fork();
                 if (data_channel == 0)
@@ -175,7 +173,7 @@ signed main(int argc, char* argv[])
                     exit(EXIT_FAILURE);
                 }
                 else
-                {   
+                {
                     WHITE << getpid() << ":: STARTING DATA CHANNEL " << data_channel ; RESET2
 
                     interrupt = server_terminate = server_success = server_failure = server_paused = server_modifying = 0;
@@ -201,9 +199,9 @@ signed main(int argc, char* argv[])
                             kill(data_channel, SIGMODIFY);
 
                             /* Recv 'offset' from data channel as marker for next execvp()*/
-                            char offset_str[LLSIZE];
+                            char offset_str[BUFFSIZE+1];
                             close(pipe_fd[WRITE]);
-                            read(pipe_fd[READ], offset_str, LLSIZE);
+                            read(pipe_fd[READ], offset_str, BUFFSIZE+1);
                             close(pipe_fd[READ]);
 
                             /* Waiting for Data Channel to terminate */
@@ -222,7 +220,7 @@ signed main(int argc, char* argv[])
                         }
                     }
                     if (server_paused)
-                    {   
+                    {
                         /* Wait for modification to get over */
                         while (server_modifying) pause();
                         WHITE << getpid() << ":: CODE MODIFICATION ENDED"; RESET2;
@@ -236,6 +234,8 @@ signed main(int argc, char* argv[])
         }
         else
         {
+            connection_directory[conn_channel] = cli_addr;
+            // YELLOW << conn_channel; RESET2;
         }
     }
 }
