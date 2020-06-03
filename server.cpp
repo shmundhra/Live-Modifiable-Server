@@ -29,8 +29,8 @@ signed main(int argc, char* argv[])
     BLUE << getpid() << ":: FILENAME RECEIVED by Server: " << filename; RESET2;
 
     /* Extract Offset from where to start File, from 3rd CLA */
-    long long offset;
-    sscanf(argv[3], "%lld", &offset);
+    int offset, next_offset;
+    sscanf(argv[3], "%d", &offset);
     BLUE << getpid() << ":: OFFSET RECEIVED by Server: " << offset; RESET2;
 
     /* Extract Pipe File Descriptors to send offset to Parent on Pausing */
@@ -73,8 +73,10 @@ signed main(int argc, char* argv[])
         lseek(fd, offset, SEEK_SET);    // Shift to position 'offset' in the file
 
         int read_, total_read;
-        while(!interrupt)
+        int recv_;
+        while(!interrupt and !failure and !success)
         {
+            /* Production of Data - Read from File */
             bzero(buffer, (DATASIZE+1) * sizeof(char));
             if ((read_ = read(fd, buffer, DATASIZE)) < 0)
             {
@@ -85,25 +87,59 @@ signed main(int argc, char* argv[])
                 failure = 1;
                 break;
             }
-            if (read_ == 0)
-            {   
-                if (sendData(socket, 0, offset, buffer) < 0){
-                    RED << getpid() << ":: "; perror("Error in Sending Data"); RESET1
-                    failure = 1;
-                } else {
-                    GREEN << getpid() << ":: File Transfer Complete"; RESET2;
-                    success = 1;
-                }
-                break;
-            }
+
+            /* Send Produce to Client */
             if (sendData(socket, read_, offset, buffer) < 0)
             {
                 RED << getpid() << ":: "; perror("Error in Sending Data"); RESET1
                 failure = 1;
                 break;
             }
-            sleep(1);
+            else if (read_ == 0)
+            {
+                GREEN << getpid() << ":: File Transfer Complete"; RESET2;
+                success = 1;
+                break;
+            }
             offset += read_;
+            
+            /* Receive Ack from Client */
+            PacketType packet_type;
+            if ((recv_ = recvType(socket, packet_type)) < 0) {
+                RED << getpid() << ":: "; perror("Error in Receiving Packet Type"); RESET1
+                exit(EXIT_FAILURE);
+            }
+            switch (packet_type)
+            {
+                case PacketType::ERROR: {
+                                            char* error_msg = (char*)calloc(ERRSIZE+1, sizeof(char));
+                                            if (recvError(socket, error_msg) < 0)
+                                            {
+                                                RED << getpid() << ":: "; perror("Error in Receiving Error Packet"); RESET1
+                                            }
+                                            free(error_msg);
+                                            failure = 1;
+                                            break;
+                                        }
+
+                case PacketType::ACK:   {
+                                            if (recvAck(socket, &next_offset) < 0)
+                                            {
+                                                RED << getpid() << ":: "; perror("Error in Receiving Ack Packet"); RESET1
+                                                failure = 1;
+                                            }
+                                            else
+                                            {
+                                                // lseek(fd, next_offset, SEEK_SET)
+                                                lseek(fd, next_offset - offset, SEEK_CUR);
+                                                offset = next_offset;
+                                            }
+                                            break;
+                                        }
+
+                default: RED << getpid() << ":: Unexpected PacketType"; RESET2;
+            }
+            sleep(1);
         }
     }
 
@@ -116,7 +152,7 @@ signed main(int argc, char* argv[])
         }
 
         char offset_Str[LLSIZE];
-        snprintf(offset_Str, LLSIZE, "%lld", offset);
+        snprintf(offset_Str, LLSIZE, "%d", offset);
 
         close(pipefd[READ]);
         write(pipefd[WRITE], offset_Str, LLSIZE);

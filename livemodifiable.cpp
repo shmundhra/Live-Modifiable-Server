@@ -1,9 +1,9 @@
 #include "livemodifiable.h"
 
 Data::Data() = default;
-Data::Data(PacketType packet_type, int packet_len, int packet_offset, char* packet_data)
+Data::Data(int packet_len, int packet_offset, char* packet_data)
 {
-    type = htonl(PacketType(packet_type));
+    type = htonl(PacketType::DATA);
     len = htonl(packet_len);
     offset = htonl(packet_offset);
 
@@ -11,10 +11,17 @@ Data::Data(PacketType packet_type, int packet_len, int packet_offset, char* pack
     memcpy(data, packet_data, packet_len);
 }
 
-Error::Error() = default;
-Error::Error(PacketType packet_type, int packet_len, char* packet_msg)
+Ack::Ack() = default;
+Ack::Ack(int next_offset)
 {
-    type = htonl(PacketType(packet_type));
+    type = htonl(PacketType::ACK);
+    offset = htonl(next_offset);
+}
+
+Error::Error() = default;
+Error::Error(int packet_len, char* packet_msg)
+{
+    type = htonl(PacketType::ERROR);
     len = htonl(packet_len);
 
     bzero(msg, ERRSIZE * sizeof(char));
@@ -22,9 +29,9 @@ Error::Error(PacketType packet_type, int packet_len, char* packet_msg)
 }
 
 Info::Info() = default;
-Info::Info(PacketType packet_type, int packet_len, char* packet_msg)
+Info::Info(int packet_len, char* packet_msg)
 {
-    type = htonl(PacketType(packet_type));
+    type = htonl(PacketType::INFO);
     len = htonl(packet_len);
 
     bzero(msg, INFOSIZE * sizeof(char));
@@ -35,9 +42,10 @@ ostream& operator <<(ostream& os, PacketType& packet_type)
 {
     switch(packet_type)
     {
-        case PacketType::DATA:  return os << "DATA";
+        case PacketType::DATA : return os << "DATA";
+        case PacketType::ACK  : return os << "ACK";
         case PacketType::ERROR: return os << "ERROR";
-        case PacketType::INFO:  return os << "INFO";
+        case PacketType::INFO : return os << "INFO";
         default: return os << "Invalid";
     }
 }
@@ -48,6 +56,7 @@ int assignType(PacketType& packet_type, int type)
     {
         case 1: packet_type = PacketType(PacketType::ERROR); break;
         case 2: packet_type = PacketType(PacketType::DATA);  break;
+        case 3: packet_type = PacketType(PacketType::ACK);  break;
         case 4: packet_type = PacketType(PacketType::INFO);  break;
         default: RED << "Can't recognize packet type - " << type; RESET2;
                  return -1;
@@ -113,18 +122,31 @@ int recvData(const int& socket, int* offset, char* data)
     if (recv(socket, reinterpret_cast<void*>(offset), sizeof(int), MSG_WAITALL) < 0) {
         return -1;
     }
+    *offset = ntohl(*offset);
     if (recv(socket, reinterpret_cast<void*>(data), DATASIZE, MSG_WAITALL) < 0) {
         return -1;
     }
     CYAN << getpid() << ":: Received Data Packet at Offset: ";
-    BLUE << ntohl(*offset) << "\n" << data; RESET2;
+    BLUE << *offset << "\n" << data; RESET2;
 
     return ntohl(len);
 }
 
+int recvAck(const int& socket, int* offset)
+{
+    if (recv(socket, reinterpret_cast<void*>(offset), sizeof(int), MSG_WAITALL) < 0) {
+        return -1;
+    }
+    *offset = ntohl(*offset);
+    CYAN << getpid() << ":: Received Ack Packet with offset: "; 
+    BLUE << *offset; RESET2;
+
+    return sizeof(offset);
+}
+
 int sendError(const int& socket, char* error_msg)
 {
-    Error* error_packet = new Error(PacketType::ERROR, strlen(error_msg), error_msg);
+    Error* error_packet = new Error(strlen(error_msg), error_msg);
 
     int send_ = 0;
     for(int total_send = 0; total_send < sizeof(Error); total_send += send_)
@@ -140,7 +162,7 @@ int sendError(const int& socket, char* error_msg)
 
 int sendInfo(const int& socket, char* info_msg)
 {
-    Info* info_packet = new Info(PacketType::INFO, strlen(info_msg), info_msg);
+    Info* info_packet = new Info(strlen(info_msg), info_msg);
 
     int send_ = 0;
     for(int total_send = 0; total_send < sizeof(Info); total_send += send_)
@@ -156,17 +178,33 @@ int sendInfo(const int& socket, char* info_msg)
 
 int sendData(const int& socket, int len, int offset, char* data)
 {
-    Data* data_packet = new Data(PacketType::DATA, len, offset, data);
+    Data* data_packet = new Data(len, offset, data);
 
     int send_ = 0;
     for(int total_send = 0; total_send < sizeof(Data); total_send += send_)
-    {       
+    {
         if((send_ = send(socket, reinterpret_cast<void*>((char*)data_packet + total_send),
-                         sizeof(Data)-total_send, 0))< 0) {
+                         sizeof(Data)-total_send, 0)) < 0) {
             return -1;
         }
     }
     CYAN << getpid() << ":: Sent Data Packet of Length: ";
     BLUE << len; CYAN << " at Offset: "; BLUE << offset; RESET2;
     return len;
+}
+
+int sendAck(const int& socket, int offset)
+{
+    Ack* ack_packet = new Ack(offset);
+
+    int send_ = 0;
+    for(int total_send = 0; total_send < sizeof(Ack); total_send += send_)
+    {
+        if((send_ = send(socket, reinterpret_cast<void*>((char*)ack_packet + total_send),
+                         sizeof(Ack)-total_send, 0)) < 0){
+            return -1;
+        }
+    }
+    CYAN << getpid() << ":: Sent Ack Packet with Offset: "; BLUE << offset; RESET2;
+    return sizeof(offset);
 }

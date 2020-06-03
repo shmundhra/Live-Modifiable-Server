@@ -19,12 +19,12 @@
 #include <bits/stdc++.h>
 using namespace std;
 
-#define PORT 10000
+#define PORT 11002
 #define SIGMODIFY SIGUSR1
 #define EXIT_PAUSED 10
 #define READ 0
 #define WRITE 1
-#define LLSIZE sizeof(long long)
+#define LLSIZE sizeof(int)
 #define ERRSIZE 52
 #define INFOSIZE 52
 #define FILESIZE 52
@@ -44,6 +44,7 @@ using namespace std;
 enum PacketType {
     ERROR = 1,
     DATA = 2,
+    ACK = 3,
     INFO = 4
 };
 
@@ -54,7 +55,15 @@ struct Data {
     char data[DATASIZE];
 
     Data();
-    Data(PacketType packet_type, int packet_len, int packet_offset, char* packet_data);
+    Data(int packet_len, int packet_offset, char* packet_data);
+};
+
+struct Ack {
+    int type;
+    int offset;
+
+    Ack();
+    Ack(int next_offset);
 };
 
 struct Error {
@@ -63,7 +72,7 @@ struct Error {
     char msg[ERRSIZE];
 
     Error();
-    Error(PacketType packet_type, int packet_len, char* packet_msg);
+    Error(int packet_len, char* packet_msg);
 };
 
 struct Info {
@@ -72,7 +81,7 @@ struct Info {
     char msg[INFOSIZE];
 
     Info();
-    Info(PacketType packet_type, int packet_len, char* packet_msg);
+    Info(int packet_len, char* packet_msg);
 };
 
 ostream& operator <<(ostream& os, PacketType& packet_type);
@@ -83,9 +92,11 @@ int recvType(const int& socket, PacketType& packet_type);
 int recvError(const int& socket, char* error_msg);
 int recvInfo(const int& socket, char* info_msg);
 int recvData(const int& socket, int *offset, char* data);
+int recvAck(const int& socket, int* offset);
 
 int sendError(const int& socket, char* error_msg);
 int sendInfo(const int& socket, char* info_msg);
 int sendData(const int& socket, int len, int offset, char* data);
+int sendAck(const int& socket, int offset);
 
 #endif

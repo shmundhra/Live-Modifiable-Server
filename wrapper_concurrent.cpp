@@ -73,14 +73,14 @@ signed main(int argc, char* argv[])
         RED << getpid() << ":: "; perror("Error in Creating Listening Socket"); RESET1
         exit(EXIT_FAILURE);
     }
-    /*
+    
     const int enable = 1;
     if (setsockopt(listening_socket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable)) < 0) {
         RED << getpid() << ":: "; perror("Error in setting socket option to enable Reuse of Address"); RESET1
     }
     if (setsockopt(listening_socket, SOL_SOCKET, SO_REUSEPORT, &enable, sizeof(enable)) < 0) {
         RED << getpid() << ":: "; perror("Error in setting socket option to enable Reuse of Port"); RESET1
-    }*/
+    }
     
     sockaddr_in serv_addr = {AF_INET, htons(PORT), inet_addr("127.0.0.1"), sizeof(sockaddr_in)};
     serv_addr.sin_addr.s_addr = INADDR_ANY;
@@ -147,7 +147,7 @@ signed main(int argc, char* argv[])
                 exit(EXIT_FAILURE);
             }
 
-            long long offset = 0;
+            int offset = 0;
             server_success = 0;
             while(!server_success and !server_failure)
             {
@@ -216,7 +216,7 @@ signed main(int argc, char* argv[])
                                 RED << data_channel << ":: DATA CHANNEL FAILED"; RESET2;
                             }
                             if (server_paused){
-                                sscanf(offset_str, "%lld", &offset);
+                                sscanf(offset_str, "%d", &offset);
                                 BLUE << getpid() << ":: RECEIVED " << offset << " from DATA CHANNEL " << data_channel; RESET2;
                             }
                         }

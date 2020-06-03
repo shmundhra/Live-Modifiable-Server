@@ -10,7 +10,7 @@ void sig_handler(int signo)
 }
 
 signed main(int argc, char* argv[])
-{   
+{
     terminate_ = 0;
     signal(SIGINT, sig_handler);
 
@@ -79,6 +79,7 @@ signed main(int argc, char* argv[])
                                     }
 
             case PacketType::DATA : {
+                                        /* Receive Produce from Server */
                                         int offset;
                                         char* data = (char*)calloc(DATASIZE+1, sizeof(char));
                                         if ((recv_ = recvData(socket_fd, &offset, data)) < 0)
@@ -91,6 +92,16 @@ signed main(int argc, char* argv[])
                                             break;
                                         }
                                         free(data);
+
+                                        /* Consume the Produce Received */
+                                        offset += recv_;
+                                        // if (offset < 1500) offset -= offset % 33;
+
+                                        /* Send ACK of Consumption */
+                                        if (sendAck(socket_fd, offset) < 0){
+                                            RED << getpid() << ":: "; perror("Error in Sending Ack Packet");
+                                            exit(EXIT_FAILURE);
+                                        }
                                         break;
                                     }
 
