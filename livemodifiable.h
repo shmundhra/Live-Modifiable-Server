@@ -19,8 +19,9 @@
 #include <bits/stdc++.h>
 using namespace std;
 
-#define PORT 11116
+#define PORT 11121
 #define SIGMODIFY SIGUSR1
+#define TIMEOUT 60
 #define EXIT_PAUSED 10
 #define READ 0
 #define WRITE 1

@@ -1,10 +1,9 @@
 #include "livemodifiable.h"
 
-pid_t conn_channel, data_channel;
-
 static volatile sig_atomic_t interrupt;
-static volatile sig_atomic_t server_terminate, server_success, server_failure, server_paused;
 static volatile sig_atomic_t server_modifying;
+
+static volatile sig_atomic_t server_terminate, server_success, server_failure, server_paused;
 static void child_sig_handler(int signo)
 {
     interrupt = 1;
@@ -13,7 +12,7 @@ static void child_sig_handler(int signo)
         server_terminate = 1;
 
         int status;
-        if (waitpid(data_channel, &status, 0) < 0) {
+        if (wait(&status) < 0) {
             server_failure = 1;
             return;
         }
@@ -33,11 +32,13 @@ static void child_sig_handler(int signo)
     }
 }
 
+static volatile sig_atomic_t connection_terminate;
 static void par_sig_handler(int signo)
 {
+    interrupt = 1;
     if (signo == SIGCHLD)
     {
-        // pid_t connection = wait(NULL);
+        connection_terminate = 1;
     }
     if (signo == SIGINT)
     {
@@ -55,9 +56,11 @@ signed main(int argc, char* argv[])
 
     /* Set SIGINT to get ignored in the beginning */
     signal(SIGINT, SIG_IGN);
+    /* Install SIGCHLD Handler for Wrapper */
+    signal(SIGCHLD, par_sig_handler);
 
     int connection_socket;
-    sockaddr_in cli_addr;
+    sockaddr_in cli_addr = {AF_INET, htons(32399), inet_addr("127.0.0.1"), sizeof(sockaddr_in)};
     socklen_t cli_len = sizeof(sockaddr_in);
     map <pid_t, sockaddr_in> connection_directory;
 
@@ -87,23 +90,75 @@ signed main(int argc, char* argv[])
         exit(EXIT_FAILURE);
     }
 
-    /* Install Signal Handlers for SIGINT and SIGCHLD */
+    /* Set Flags and Install SIGINT Signal Handler for Wrapper */
+    interrupt = server_modifying = connection_terminate = 0;
     signal(SIGINT, par_sig_handler);
-    signal(SIGCHLD, par_sig_handler);
 
-    server_modifying = 0;
+    /* Block SIGCHLD from occuring outside pselect() */
+    sigset_t sigmask; sigemptyset(&sigmask); sigaddset(&sigmask, SIGCHLD);
+    if (sigprocmask(SIG_BLOCK, &sigmask, NULL) < 0){
+        RED << getpid() << ":: "; perror("Error in Blocking SIGCHLD");
+        exit(EXIT_FAILURE);
+    }
+    sigset_t emptymask;
+
+    bool is_failure(0), is_timeout(0);
     while(1)
     {
         WHITE << getpid() << ":: Waiting for NEW CONNECTIONS..."; RESET2;
-        do {
-            if((connection_socket = accept(listening_socket,
-                                           reinterpret_cast<sockaddr*>(&cli_addr),
-                                           &cli_len)) < 0)
+
+        while(1)
+        {
+            fd_set read_fds; FD_ZERO(&read_fds); FD_SET(listening_socket, &read_fds);
+            timespec timeout = (timespec){.tv_sec = TIMEOUT, .tv_nsec = 0};
+
+            sigemptyset(&emptymask);
+
+            int ready_fd = pselect(listening_socket+1, &read_fds, NULL, NULL, &timeout, &emptymask);
+            if (ready_fd < 0) {
+                if (errno == EINTR and interrupt)
+                {
+                    interrupt = 0;
+                    if (connection_terminate) {
+                        connection_terminate = 0;
+                        pid_t child = wait(NULL);
+                        cli_addr = connection_directory[child];
+                        connection_directory.erase(child);
+                        GREEN << getpid() << ":: CLIENT @ "
+                              << inet_ntoa(cli_addr.sin_addr) << "::" << ntohs(cli_addr.sin_port)
+                              << " DISCONNECTED"; RESET2;
+                    }
+                }
+                else
+                {
+                    RED << getpid() << ":: "; perror("Error in select()"); RESET1;
+                    is_failure = 1;
+                    break;
+                }
+            }
+            else if (ready_fd == 0)
             {
-                RED << getpid() << ":: "; perror("Error in Accepting Incoming Connection"); RESET1
+                GREEN << getpid() << ":: SERVER TIMEOUT"; RESET2;
+                is_timeout = 1;
+                break;
+            }
+            else if (FD_ISSET(listening_socket, &read_fds))
+            {
+                if((connection_socket = accept(listening_socket,
+                                               reinterpret_cast<sockaddr*>(&cli_addr),
+                                               &cli_len)) < 0)
+                {
+                    RED << getpid() << ":: "; perror("Error in Accepting Incoming Connection"); RESET1
+                }
+                else {
+                    break;
+                }
             }
         }
-        while(connection_socket < 0);
+        if (is_failure or is_timeout) {
+            close(listening_socket);
+            break;
+        }
 
         if (server_modifying){
             WHITE << getpid() << ":: Server MODIFYING, Connection QUEUED.."; RESET2;
@@ -112,11 +167,20 @@ signed main(int argc, char* argv[])
         }
 
         /************************FORKING CONNECTION CHANNEL******************************/
-        conn_channel = fork();
+        pid_t conn_channel = fork();
         if (conn_channel == 0)
-        {
+        {   
+            /* Empty SIGNAL MASK of Connection Channel */
+            sigemptyset(&emptymask);
+            if (sigprocmask(SIG_SETMASK, &emptymask, NULL) < 0) {
+                RED << getpid() << ":: "; perror("Error in Clearing SIGMASK"); RESET1;
+                exit(EXIT_FAILURE);
+            }
+            
             /* Set SIGINT to get ignored in the beginning */
             signal(SIGINT, SIG_IGN);
+            /* Install SIGCHLD Handler for Connection Channel */ 
+            signal(SIGCHLD, child_sig_handler);
 
             GREEN << getpid() << ":: CLIENT @ "
                   << inet_ntoa(cli_addr.sin_addr) << "::" << ntohs(cli_addr.sin_port)
@@ -140,11 +204,7 @@ signed main(int argc, char* argv[])
                 RED << getpid() << ":: "; perror("Error in Receiving Info Packet"); RESET1
                 exit(EXIT_FAILURE);
             }
-
-            /* Install Signal Handlers for SIGINT and SIGCHLD */
-            signal(SIGINT, child_sig_handler);
-            signal(SIGCHLD, child_sig_handler);
-
+            
             /* Start Data Transfer by spawning Data Channel */
             int offset = 0;
             server_success = 0;
@@ -152,8 +212,8 @@ signed main(int argc, char* argv[])
             {
                 int pipe_fd[2]; pipe(pipe_fd);
 
-                /************************FORKING DATA CHANNEL******************************/
-                data_channel = fork();
+                /*****************************FORKING DATA CHANNEL******************************/
+                pid_t data_channel = fork();
                 if (data_channel == 0)
                 {
                     char* argv[] = {
@@ -176,7 +236,10 @@ signed main(int argc, char* argv[])
                 {
                     WHITE << getpid() << ":: STARTING DATA CHANNEL " << data_channel ; RESET2
 
+                    /* Set Flags and Install SIGINT Handler for Connection Channel */
                     interrupt = server_terminate = server_success = server_failure = server_paused = server_modifying = 0;
+                    signal(SIGINT, child_sig_handler);
+
                     while(!server_terminate)
                     {
                         WHITE << getpid() << ":: PAUSED for SIGCHLD or SIGINT"; RESET2;
@@ -235,7 +298,18 @@ signed main(int argc, char* argv[])
         else
         {
             connection_directory[conn_channel] = cli_addr;
-            // YELLOW << conn_channel; RESET2;
         }
     }
+    
+    while(1){
+        pid_t child = wait(NULL);
+        if (child < 0) break;
+        cli_addr = connection_directory[child];
+        connection_directory.erase(child);
+        GREEN << getpid() << ":: CLIENT @ "
+                << inet_ntoa(cli_addr.sin_addr) << "::" << ntohs(cli_addr.sin_port)
+                << " DISCONNECTED"; RESET2;
+    }
+    if (is_failure) {   RED << getpid() << ":: SERVER TERMINATED"; RESET2; exit(EXIT_FAILURE);}
+    if (is_timeout) { GREEN << getpid() << ":: SERVER TERMINATED"; RESET2; exit(EXIT_SUCCESS);}
 }

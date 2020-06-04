@@ -144,7 +144,7 @@ signed main(int argc, char* argv[])
     }
 
     /* Send 'offset' to wrapper as marker to start transfer in next execvp */
-    if(interrupt == 1)
+    if(interrupt == 1 and success != 1 and failure != 1)
     {
         if (sendInfo(socket, (char*)string("Modification Taking Place...").c_str()) < 0) {
             RED << getpid() << ":: "; perror("Error in Sending Modification Start Message"); RESET1
@@ -163,6 +163,6 @@ signed main(int argc, char* argv[])
     close(fd), close(socket);
 
     if(failure == 1) exit(EXIT_FAILURE);
-    if(interrupt == 1) exit(EXIT_PAUSED);
     if(success == 1) exit(EXIT_SUCCESS);
+    if(interrupt == 1) exit(EXIT_PAUSED);
 }
