@@ -2,7 +2,7 @@
 A Wrapper Server which can pause a connection, allow modification to Server Code and resume from same point
 
 # Instructions
-Generate a SIGINT using Ctrl+C to pause the server. Once the modified executable is ready, generate another SIGINT to resume the server and the existing connections. During this pause time, the server shall still be accepting connections, they shall just be queued.
+Generate a SIGINT using Ctrl+C in the terminal to pause the server. Make sure you send the SIGINT to the whole process group rather than just the wrapper server in the terminal. Once the modified executable is ready, generate another SIGINT to resume the server and the existing connections. During this pause time, the server shall still be accepting connections, they shall just be queued.
 
 # How to Run
 	Compile the Wrapper(Concurrent) using the necessary Make Command
