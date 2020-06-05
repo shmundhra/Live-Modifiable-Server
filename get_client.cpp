@@ -1,6 +1,6 @@
 #include "livemodifiable.h"
 
-static volatile sig_atomic_t terminate_;
+static volatile sig_atomic_t terminate_(0);
 static void sig_handler(int signo)
 {
     if(signo == SIGINT)
@@ -11,7 +11,6 @@ static void sig_handler(int signo)
 
 signed main(int argc, char* argv[])
 {
-    terminate_ = 0;
     signal(SIGINT, sig_handler);
 
     if (argc < 2) {
@@ -32,15 +31,15 @@ signed main(int argc, char* argv[])
     }
 
     sockaddr_in serv_addr = {AF_INET, htons(PORT), inet_addr(IP_ADDRESS.c_str()), sizeof(sockaddr_in)};
-
     if (connect(socket_fd, reinterpret_cast<sockaddr*>(&serv_addr), sizeof(serv_addr)) < 0) {
         RED << getpid() << ":: "; perror("Error in Connecting to TCP Server"); RESET1
         exit(EXIT_FAILURE);
     }
     GREEN << "CONNECTED to SERVER..."; RESET2;
 
-    if (sendInfo(socket_fd, (char*)FileName.c_str()) < 0) {
-        RED << getpid() << ":: "; perror("Error in Sending FileName Information to Server"); RESET1
+    string Command("GET " + FileName);
+    if (sendInfo(socket_fd, (char*)Command.c_str()) < 0) {
+        RED << getpid() << ":: "; perror("Error in Sending Command to Server"); RESET1
         exit(EXIT_FAILURE);
     }
 
@@ -94,11 +93,11 @@ signed main(int argc, char* argv[])
                                         free(data);
 
                                         /* Consume the Produce Received */
-                                        offset += recv_;
-                                        // if (offset < 1500) offset -= offset % 33;
+                                        int next_offset = offset + recv_;
+                                        // if (next_offset < 1500) next_offset -= next_offset % 33;
 
                                         /* Send ACK of Consumption */
-                                        if (sendAck(socket_fd, offset) < 0){
+                                        if (sendAck(socket_fd, next_offset) < 0){
                                             RED << getpid() << ":: "; perror("Error in Sending Ack Packet");
                                             exit(EXIT_FAILURE);
                                         }

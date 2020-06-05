@@ -259,9 +259,9 @@ signed main(int argc, char* argv[])
             }
 
             /* Receive FileName */
-            char filename[INFOSIZE+1];
-            bzero(filename, (INFOSIZE+1) * sizeof(char));
-            if (recvInfo(connection_socket, filename) < 0) {
+            char command[INFOSIZE+1];
+            bzero(command, (INFOSIZE+1) * sizeof(char));
+            if (recvInfo(connection_socket, command) < 0) {
                 RED << getpid() << ":: "; perror("Error in Receiving Info Packet"); RESET1
                 exit(EXIT_FAILURE);
             }
@@ -287,7 +287,7 @@ signed main(int argc, char* argv[])
                     char* argv[] = {
                                         (char*)executable.c_str(),
                                         (char*)(to_string(connection_socket).c_str()),
-                                        filename,
+                                        command,
                                         (char*)(to_string(offset).c_str()),
                                         (char*)(to_string(pipe_fd[READ]).c_str()),
                                         (char*)(to_string(pipe_fd[WRITE]).c_str()),
