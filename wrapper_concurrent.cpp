@@ -1,12 +1,10 @@
 #include "livemodifiable.h"
 
-static volatile sig_atomic_t interrupt;
-static volatile sig_atomic_t server_modifying;
+static volatile sig_atomic_t server_modifying(0);
 
 static volatile sig_atomic_t server_terminate, server_success, server_failure, server_paused;
 static void child_sig_handler(int signo)
 {
-    interrupt = 1;
     if (signo == SIGCHLD)
     {
         server_terminate = 1;
@@ -32,7 +30,8 @@ static void child_sig_handler(int signo)
     }
 }
 
-static volatile sig_atomic_t connection_terminate;
+static volatile sig_atomic_t interrupt(0);
+static volatile sig_atomic_t connection_terminate(0);
 static void par_sig_handler(int signo)
 {
     interrupt = 1;
@@ -46,6 +45,107 @@ static void par_sig_handler(int signo)
     }
 }
 
+int CreateSocket()
+{
+    int socket_fd;
+    if ((socket_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        RED << getpid() << ":: "; perror("Error in Creating Listening Socket"); RESET1
+        return -1;
+    }
+
+    const int enable = 1;
+     if (setsockopt(socket_fd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable)) < 0) {
+        RED << getpid() << ":: "; perror("Error in setting socket option to enable Reuse of Address"); RESET1
+    }
+    if (setsockopt(socket_fd, SOL_SOCKET, SO_REUSEPORT, &enable, sizeof(enable)) < 0) {
+        RED << getpid() << ":: "; perror("Error in setting socket option to enable Reuse of Port"); RESET1
+    }
+
+    return socket_fd;
+}
+
+int BindSocket(int socket, sockaddr_in& server_addr)
+{
+    server_addr = {AF_INET, htons(PORT), inet_addr("127.0.0.1"), sizeof(sockaddr_in)};
+    server_addr.sin_addr.s_addr = INADDR_ANY;
+    if (bind(socket, reinterpret_cast<struct sockaddr *>(&server_addr), sizeof(server_addr)) < 0) {
+        RED << getpid() << ":: "; perror("Error in binding Listening Socket"); RESET1
+        return -1;
+    }
+    return 0;
+}
+
+int TerminateChannel(map <pid_t, sockaddr_in>& directory)
+{
+    pid_t channel_pid = wait(NULL);
+    if (channel_pid < 0) return -1;
+    GREEN << getpid() << ":: CLIENT @ "
+          << inet_ntoa(directory[channel_pid].sin_addr)
+          << "::" << ntohs(directory[channel_pid].sin_port)
+          << " DISCONNECTED"; RESET2
+    directory.erase(channel_pid);
+    return 0;
+}
+
+int BlockSignal(int signo)
+{
+    sigset_t sigmask; sigemptyset(&sigmask); sigaddset(&sigmask, signo);
+    if (sigprocmask(SIG_BLOCK, &sigmask, NULL) < 0){
+        RED << getpid() << ":: "; perror("Error in Blocking Signal");
+        return -1;
+    }
+    return 0;
+}
+
+int UnblockSignal(int signo)
+{
+    sigset_t sigmask; sigemptyset(&sigmask); sigaddset(&sigmask, signo);
+    if (sigprocmask(SIG_UNBLOCK, &sigmask, NULL) < 0){
+        RED << getpid() << ":: "; perror("Error in Unblocking Signal");
+        return -1;
+    }
+    return 0;
+}
+
+int UnblockAllSignal()
+{
+    sigset_t emptymask; sigemptyset(&emptymask);
+    if (sigprocmask(SIG_SETMASK, &emptymask, NULL) < 0){
+        RED << getpid() << ":: "; perror("Error in Clearing SIGMASK");
+        return -1;
+    }
+    return 0;
+}
+
+int HandleModification(pid_t data_channel, int pipe_fd[2], int* offset)
+{
+    WHITE << data_channel << ":: CODE MODIFICATION STARTED" << endl ;
+
+    /* Signal Data Channel about modification */
+    kill(data_channel, SIGMODIFY);
+
+    /* Recv 'offset' from data channel as marker for next execvp()*/
+    char offset_str[BUFFSIZE+1];
+    close(pipe_fd[WRITE]);
+    read(pipe_fd[READ], offset_str, BUFFSIZE+1);
+    close(pipe_fd[READ]);
+    sscanf(offset_str, "%d", offset);
+}
+
+int HandleTermination(pid_t data_channel, int offset, sig_atomic_t success,
+                      sig_atomic_t failure, sig_atomic_t paused)
+{
+    if (success){
+        GREEN << data_channel << ":: DATA CHANNEL TERMINATION SUCCESSFUL"; RESET2;
+    }
+    if (failure){
+        RED << data_channel << ":: DATA CHANNEL FAILED"; RESET2;
+    }
+    if (paused){
+        BLUE << getpid() << ":: RECEIVED " << offset << " from DATA CHANNEL " << data_channel; RESET2;
+    }
+}
+
 signed main(int argc, char* argv[])
 {
     if (argc < 2) {
@@ -54,34 +154,27 @@ signed main(int argc, char* argv[])
     }
     string executable(argv[1]);
 
-    /* Set SIGINT to get ignored in the beginning */
-    signal(SIGINT, SIG_IGN);
+    /* Block SIGINT and SIGCHLD from occuring outside pselect() */
+    if ((BlockSignal(SIGINT) < 0) or (BlockSignal(SIGCHLD) < 0)) {
+        exit(EXIT_FAILURE);
+    }
+    sigset_t emptymask; sigemptyset(&emptymask);
+
+    /* Install SIGINT  Handler for Wrapper */
     /* Install SIGCHLD Handler for Wrapper */
+    signal(SIGINT, par_sig_handler);
     signal(SIGCHLD, par_sig_handler);
 
-    int connection_socket;
-    sockaddr_in cli_addr = {AF_INET, htons(32399), inet_addr("127.0.0.1"), sizeof(sockaddr_in)};
+    int listening_socket, connection_socket;
+    sockaddr_in serv_addr, cli_addr;
     socklen_t cli_len = sizeof(sockaddr_in);
     map <pid_t, sockaddr_in> connection_directory;
 
-    int listening_socket = socket(AF_INET, SOCK_STREAM, 0);
-    if (listening_socket < 0) {
-        RED << getpid() << ":: "; perror("Error in Creating Listening Socket"); RESET1
+    if ((listening_socket = CreateSocket()) < 0) {
         exit(EXIT_FAILURE);
     }
 
-    const int enable = 1;
-    if (setsockopt(listening_socket, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable)) < 0) {
-        RED << getpid() << ":: "; perror("Error in setting socket option to enable Reuse of Address"); RESET1
-    }
-    if (setsockopt(listening_socket, SOL_SOCKET, SO_REUSEPORT, &enable, sizeof(enable)) < 0) {
-        RED << getpid() << ":: "; perror("Error in setting socket option to enable Reuse of Port"); RESET1
-    }
-
-    sockaddr_in serv_addr = {AF_INET, htons(PORT), inet_addr("127.0.0.1"), sizeof(sockaddr_in)};
-    serv_addr.sin_addr.s_addr = INADDR_ANY;
-    if (bind(listening_socket, reinterpret_cast<struct sockaddr *>(&serv_addr), sizeof(serv_addr)) < 0) {
-        RED << getpid() << ":: "; perror("Error in binding Listening Socket"); RESET1
+    if (BindSocket(listening_socket, serv_addr) < 0) {
         exit(EXIT_FAILURE);
     }
 
@@ -90,30 +183,16 @@ signed main(int argc, char* argv[])
         exit(EXIT_FAILURE);
     }
 
-    /* Set Flags and Install SIGINT Signal Handler for Wrapper */
-    interrupt = server_modifying = connection_terminate = 0;
-    signal(SIGINT, par_sig_handler);
-
-    /* Block SIGCHLD from occuring outside pselect() */
-    sigset_t sigmask; sigemptyset(&sigmask); sigaddset(&sigmask, SIGCHLD);
-    if (sigprocmask(SIG_BLOCK, &sigmask, NULL) < 0){
-        RED << getpid() << ":: "; perror("Error in Blocking SIGCHLD");
-        exit(EXIT_FAILURE);
-    }
-    sigset_t emptymask;
-
     bool is_failure(0), is_timeout(0);
     while(1)
     {
         WHITE << getpid() << ":: Waiting for NEW CONNECTIONS..."; RESET2;
-
         while(1)
         {
             fd_set read_fds; FD_ZERO(&read_fds); FD_SET(listening_socket, &read_fds);
             timespec timeout = (timespec){.tv_sec = TIMEOUT, .tv_nsec = 0};
 
-            sigemptyset(&emptymask);
-
+            WHITE << getpid() << ":: Waiting for EVENT..."; RESET2;
             int ready_fd = pselect(listening_socket+1, &read_fds, NULL, NULL, &timeout, &emptymask);
             if (ready_fd < 0) {
                 if (errno == EINTR and interrupt)
@@ -121,12 +200,7 @@ signed main(int argc, char* argv[])
                     interrupt = 0;
                     if (connection_terminate) {
                         connection_terminate = 0;
-                        pid_t child = wait(NULL);
-                        cli_addr = connection_directory[child];
-                        connection_directory.erase(child);
-                        GREEN << getpid() << ":: CLIENT @ "
-                              << inet_ntoa(cli_addr.sin_addr) << "::" << ntohs(cli_addr.sin_port)
-                              << " DISCONNECTED"; RESET2;
+                        TerminateChannel(connection_directory);
                     }
                 }
                 else
@@ -144,13 +218,12 @@ signed main(int argc, char* argv[])
             }
             else if (FD_ISSET(listening_socket, &read_fds))
             {
-                if((connection_socket = accept(listening_socket,
+                if ((connection_socket = accept(listening_socket,
                                                reinterpret_cast<sockaddr*>(&cli_addr),
                                                &cli_len)) < 0)
                 {
                     RED << getpid() << ":: "; perror("Error in Accepting Incoming Connection"); RESET1
-                }
-                else {
+                } else {
                     break;
                 }
             }
@@ -160,31 +233,19 @@ signed main(int argc, char* argv[])
             break;
         }
 
-        if (server_modifying){
-            WHITE << getpid() << ":: Server MODIFYING, Connection QUEUED.."; RESET2;
-            while (server_modifying) pause();
-            WHITE << getpid() << ":: Server MODIFIED, Connection STARTS."; RESET2;
-        }
-
-        /************************FORKING CONNECTION CHANNEL******************************/
+        /***************************FORKING CONNECTION CHANNEL******************************/
         pid_t conn_channel = fork();
         if (conn_channel == 0)
-        {   
+        {
             /* Empty SIGNAL MASK of Connection Channel */
-            sigemptyset(&emptymask);
-            if (sigprocmask(SIG_SETMASK, &emptymask, NULL) < 0) {
-                RED << getpid() << ":: "; perror("Error in Clearing SIGMASK"); RESET1;
+            if (UnblockAllSignal() < 0) {
                 exit(EXIT_FAILURE);
             }
-            
-            /* Set SIGINT to get ignored in the beginning */
-            signal(SIGINT, SIG_IGN);
-            /* Install SIGCHLD Handler for Connection Channel */ 
-            signal(SIGCHLD, child_sig_handler);
 
-            GREEN << getpid() << ":: CLIENT @ "
-                  << inet_ntoa(cli_addr.sin_addr) << "::" << ntohs(cli_addr.sin_port)
-                  << " CONNECTED"; RESET2;
+            /* Install SIGINT  Handler for Connection Channel */
+            /* Install SIGCHLD Handler for Connection Channel */
+            signal(SIGINT, child_sig_handler);
+            signal(SIGCHLD, child_sig_handler);
 
             /* Receive Info Packet Header */
             PacketType packet_type;
@@ -204,14 +265,21 @@ signed main(int argc, char* argv[])
                 RED << getpid() << ":: "; perror("Error in Receiving Info Packet"); RESET1
                 exit(EXIT_FAILURE);
             }
-            
+
+            if (server_modifying)
+            {
+                WHITE << getpid() << ":: Server MODIFYING, Connection QUEUED.."; RESET2;
+                while (server_modifying) pause();
+                WHITE << getpid() << ":: Server MODIFIED, Connection STARTS."; RESET2;
+            }
+
             /* Start Data Transfer by spawning Data Channel */
             int offset = 0;
-            server_success = 0;
-            while(!server_success and !server_failure)
+            do
             {
-                int pipe_fd[2]; pipe(pipe_fd);
+                server_terminate = server_success = server_failure = server_paused = 0;
 
+                int pipe_fd[2]; pipe(pipe_fd);
                 /*****************************FORKING DATA CHANNEL******************************/
                 pid_t data_channel = fork();
                 if (data_channel == 0)
@@ -235,52 +303,31 @@ signed main(int argc, char* argv[])
                 else
                 {
                     WHITE << getpid() << ":: STARTING DATA CHANNEL " << data_channel ; RESET2
-
-                    /* Set Flags and Install SIGINT Handler for Connection Channel */
-                    interrupt = server_terminate = server_success = server_failure = server_paused = server_modifying = 0;
-                    signal(SIGINT, child_sig_handler);
-
-                    while(!server_terminate)
+                    while(1)
                     {
-                        WHITE << getpid() << ":: PAUSED for SIGCHLD or SIGINT"; RESET2;
-                        while(!interrupt) pause();
-
-                        if (server_terminate)
+                        if (server_terminate)                   /* SIGCHLD - Data Channel has Terminated */
                         {
-                            if (server_success){
+                            if (server_success) {
                                 GREEN << data_channel << ":: DATA TRANSFER SUCCESSFUL"; RESET2;
                             }
-                            if (server_failure){
+                            if (server_failure) {
                                 RED << data_channel << ":: DATA TRANSFER FAILED"; RESET2;
                             }
+                            break;
                         }
-                        if (server_modifying)
+                        if (server_modifying)                   /* SIGINT - Modification has Started */
                         {
-                            WHITE << data_channel << ":: CODE MODIFICATION STARTED" << endl ;
-
-                            /* Signal Data Channel about modification */
-                            kill(data_channel, SIGMODIFY);
-
-                            /* Recv 'offset' from data channel as marker for next execvp()*/
-                            char offset_str[BUFFSIZE+1];
-                            close(pipe_fd[WRITE]);
-                            read(pipe_fd[READ], offset_str, BUFFSIZE+1);
-                            close(pipe_fd[READ]);
+                            HandleModification(data_channel, pipe_fd, &offset);
 
                             /* Waiting for Data Channel to terminate */
                             while(!server_terminate) pause();
 
-                            if (server_success){
-                                GREEN << data_channel << ":: DATA CHANNEL TERMINATION SUCCESSFUL"; RESET2;
-                            }
-                            if (server_failure){
-                                RED << data_channel << ":: DATA CHANNEL FAILED"; RESET2;
-                            }
-                            if (server_paused){
-                                sscanf(offset_str, "%d", &offset);
-                                BLUE << getpid() << ":: RECEIVED " << offset << " from DATA CHANNEL " << data_channel; RESET2;
-                            }
+                            HandleTermination(data_channel, offset, server_success, server_failure, server_paused);
+                            break;
                         }
+
+                        WHITE << getpid() << ":: PAUSED for SIGCHLD or SIGINT"; RESET2;
+                        while(!server_terminate and !server_modifying) pause();
                     }
                     if (server_paused)
                     {
@@ -291,25 +338,24 @@ signed main(int argc, char* argv[])
                 }
                 close(pipe_fd[READ]), close(pipe_fd[WRITE]);
             }
+            while(!server_success and !server_failure);
+
             /* The connection channel exits after success or failure of transfer */
             if(server_failure) exit(EXIT_FAILURE);
             if(server_success) exit(EXIT_SUCCESS);
         }
         else
         {
+            GREEN << conn_channel << ":: CLIENT @ "
+                  << inet_ntoa(cli_addr.sin_addr) << "::" << ntohs(cli_addr.sin_port)
+                  << " CONNECTED"; RESET2;
             connection_directory[conn_channel] = cli_addr;
         }
     }
-    
-    while(1){
-        pid_t child = wait(NULL);
-        if (child < 0) break;
-        cli_addr = connection_directory[child];
-        connection_directory.erase(child);
-        GREEN << getpid() << ":: CLIENT @ "
-                << inet_ntoa(cli_addr.sin_addr) << "::" << ntohs(cli_addr.sin_port)
-                << " DISCONNECTED"; RESET2;
-    }
+
+    /* Waiting for all Connection Channels to Terminate */
+    while(TerminateChannel(connection_directory) == 0);
+
     if (is_failure) {   RED << getpid() << ":: SERVER TERMINATED"; RESET2; exit(EXIT_FAILURE);}
     if (is_timeout) { GREEN << getpid() << ":: SERVER TERMINATED"; RESET2; exit(EXIT_SUCCESS);}
 }
