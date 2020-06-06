@@ -151,11 +151,10 @@ vector <char*> BackupBuffer(vector<pair<int, sockaddr_in>> const& backup_nodes)
     vector<char*>backup_buffers;
     for(int i = 0; i < backup_nodes.size(); i++)
     {
-        char* buffer = (char*)calloc(FDSIZE + 3*BUFFSIZE + 1, sizeof(char));
-        snprintf(buffer, FDSIZE + 3*BUFFSIZE + 1, "%d-%hu-%hu-%lu", backup_nodes[i].first
-                                                                  , backup_nodes[i].second.sin_family
-                                                                  , backup_nodes[i].second.sin_port
-                                                                  , (long)backup_nodes[i].second.sin_addr.s_addr);
+        int fd = backup_nodes[i].first;
+        sockaddr node_addr = *(sockaddr*)&backup_nodes[i].second;
+        char* buffer = (char*)calloc(FDSIZE + FDSIZE + sizeof(sockaddr) + 1, sizeof(char));
+        snprintf(buffer, FDSIZE + FDSIZE + sizeof(sockaddr) + 1, "%d-%hu-%s", fd, node_addr.sa_family, node_addr.sa_data);
         backup_buffers.push_back(buffer);
     }
     return backup_buffers;
