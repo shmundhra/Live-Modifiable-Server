@@ -41,7 +41,7 @@ signed main(int argc, char* argv[])
         RED << getpid() << ":: "; perror("Error in Connecting to TCP Server"); RESET1
         exit(EXIT_FAILURE);
     }
-    GREEN << "CONNECTED to SERVER..."; RESET2;
+    GREEN << getpid() << ":: CONNECTED to SERVER..."; RESET2;
 
     string Command("PUT " + FileName);
     if (sendInfo(socket_fd, (char*)Command.c_str()) < 0) {
@@ -58,6 +58,10 @@ signed main(int argc, char* argv[])
         if ((recv_ = recvType(socket_fd, packet_type)) < 0) {
             RED << getpid() << ":: "; perror("Error in Receiving Packet Type"); RESET1
             exit(EXIT_FAILURE);
+        }
+        if (recv_ == 0) {
+            GREEN << getpid() << ":: SERVER TERMINATED CONNECTION"; RESET2;
+            break;
         }
 
         switch(packet_type)

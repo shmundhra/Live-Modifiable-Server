@@ -18,6 +18,13 @@ Ack::Ack(int next_offset)
     offset = htonl(next_offset);
 }
 
+Backup::Backup() = default;
+Backup::Backup(Data backup_data, pid_t server_pid)
+{
+    data = backup_data;
+    pid = htonl(server_pid);
+}
+
 Error::Error() = default;
 Error::Error(int packet_len, char* packet_msg)
 {
@@ -68,8 +75,12 @@ int assignType(PacketType& packet_type, int type)
 int recvType(const int& socket, PacketType& packet_type)
 {
     int type;
-    if (recv(socket, reinterpret_cast<void*>(&type), sizeof(int), MSG_WAITALL) < 0) {
+    int recv_ = recv(socket, reinterpret_cast<void*>(&type), sizeof(int), MSG_WAITALL);
+    if (recv_ < 0) {
         return -1;
+    }
+    if (recv_ == 0) {
+        return 0;
     }
     if (assignType(packet_type, ntohl(type)) < 0) {
         return -1;
@@ -138,10 +149,26 @@ int recvAck(const int& socket, int* offset)
         return -1;
     }
     *offset = ntohl(*offset);
-    CYAN << getpid() << ":: Received Ack Packet with offset: "; 
+    CYAN << getpid() << ":: Received Ack Packet with offset: ";
     BLUE << *offset; RESET2;
 
     return sizeof(offset);
+}
+
+int recvBackup(const int& socket, int* offset, char* data, pid_t* pid)
+{
+    int len;
+    if ((len = recvData(socket, offset, data)) < 0) {
+        return -1;
+    }
+
+    if (recv(socket, reinterpret_cast<void*>(pid), sizeof(pid_t), MSG_WAITALL) < 0) {
+        return -1;
+    }
+    *pid = ntohl(*pid);
+
+    CYAN << getpid() << ":: Received Backup From " << *pid; RESET2;
+    return len;
 }
 
 int sendError(const int& socket, char* error_msg)
@@ -207,4 +234,21 @@ int sendAck(const int& socket, int offset)
     }
     CYAN << getpid() << ":: Sent Ack Packet with Offset: "; BLUE << offset; RESET2;
     return sizeof(offset);
+}
+
+int sendBackup(const int& socket, Data data, pid_t pid)
+{
+    Backup* backup_packet = new Backup(data, pid);
+
+    int send_ = 0;
+    for(int total_send = 0; total_send < sizeof(Backup); total_send += send_)
+    {
+        if((send_ = send(socket, reinterpret_cast<void*>((char*)backup_packet + total_send),
+                         sizeof(Backup)-total_send, 0)) < 0) {
+            return -1;
+        }
+    }
+    CYAN << getpid() << ":: Sent Backup Packet of Length: ";
+    BLUE << ntohl(data.len); CYAN << " at Offset: "; BLUE << data.offset; RESET2;
+    return ntohl(data.len);
 }

@@ -173,7 +173,6 @@ signed main(int argc, char* argv[])
     if ((listening_socket = CreateSocket()) < 0) {
         exit(EXIT_FAILURE);
     }
-
     if (BindSocket(listening_socket, serv_addr) < 0) {
         exit(EXIT_FAILURE);
     }
@@ -181,6 +180,54 @@ signed main(int argc, char* argv[])
     if (listen(listening_socket, 10) < 0) {
         RED << getpid() << ":: "; perror("Error in Listening on Listening Socket"); RESET1
         exit(EXIT_FAILURE);
+    }
+
+    vector <int> backup_fds;
+    WHITE << getpid() << ":: Waiting for BACKUP NODES..."; RESET2;
+    while(1)
+    {
+        fd_set read_fds; FD_ZERO(&read_fds);
+        FD_SET(listening_socket, &read_fds), FD_SET(STDIN_FILENO, &read_fds);
+        timespec timeout = (timespec){.tv_sec = TIMEOUT/2, .tv_nsec = 0};
+
+        WHITE << getpid() << ":: Waiting for EVENT..."; RESET2;
+        int ready_fd = pselect(listening_socket+1, &read_fds, NULL, NULL, &timeout, &emptymask);
+        if (ready_fd < 0)
+        {
+            if (interrupt /*&& errno == EINTR*/) {
+                interrupt = 0;
+                continue;
+            } else {
+                RED << getpid() << "::"; perror("Error in Accepting Backup Nodes"); RESET1;
+            }
+        }
+        if (ready_fd == 0)
+        {
+            GREEN << getpid() << ":: ACCEPTED ALL BACKUP NODES... "; RESET2;
+            break;
+        }
+        if (ready_fd > 0)
+        {
+            if (FD_ISSET(listening_socket, &read_fds))
+            {
+                if ((connection_socket = accept(listening_socket,
+                                                reinterpret_cast<sockaddr*>(&cli_addr),
+                                                &cli_len)) < 0)
+                {
+                    RED << getpid() << ":: "; perror("Error in Accepting Backup Nodes"); RESET1;
+                }
+                else
+                {
+                    sendInfo(connection_socket,(char*)"Registered Node");
+                    backup_fds.push_back(connection_socket);
+                }
+            }
+            if (FD_ISSET(STDIN_FILENO, &read_fds))
+            {
+                GREEN << getpid() << ":: ACCEPTED ALL BACKUP NODES... "; RESET2;
+                break;
+            }
+        }
     }
 
     bool is_failure(0), is_timeout(0);
@@ -210,13 +257,13 @@ signed main(int argc, char* argv[])
                     break;
                 }
             }
-            else if (ready_fd == 0)
+            if (ready_fd == 0)
             {
                 GREEN << getpid() << ":: SERVER TIMEOUT"; RESET2;
                 is_timeout = 1;
                 break;
             }
-            else if (FD_ISSET(listening_socket, &read_fds))
+            if (ready_fd > 0 and FD_ISSET(listening_socket, &read_fds))
             {
                 if ((connection_socket = accept(listening_socket,
                                                reinterpret_cast<sockaddr*>(&cli_addr),
@@ -248,13 +295,20 @@ signed main(int argc, char* argv[])
             signal(SIGCHLD, child_sig_handler);
 
             /* Receive Info Packet Header */
-            PacketType packet_type;
-            if (recvType(connection_socket, packet_type) < 0) {
+            int recv_; PacketType packet_type;
+            if ((recv_ = recvType(connection_socket, packet_type)) < 0) {
                 RED << getpid() << ":: "; perror("Error in Receiving Packet Type"); RESET1
                 exit(EXIT_FAILURE);
             }
+            if (recv_ == 0) {
+                GREEN << getpid() << ":: CLIENT TERMINATED CONNECTION"; RESET2;
+                close(connection_socket);
+                exit(EXIT_SUCCESS);
+            }
+
             if (packet_type != PacketType::INFO) {
-                RED << "INFO Packet Expected, " << packet_type << " Packet Received." ; RESET2;
+                RED << getpid() << ":: INFO Packet Expected, " 
+                    << packet_type << " Packet Received." ; RESET2;
                 exit(EXIT_FAILURE);
             }
 
@@ -284,13 +338,23 @@ signed main(int argc, char* argv[])
                 pid_t data_channel = fork();
                 if (data_channel == 0)
                 {
+                    char pipefd_buffer[FDSIZE + FDSIZE + 1];
+                    snprintf(pipefd_buffer, FDSIZE + FDSIZE, "%d#%d", pipe_fd[READ], pipe_fd[WRITE]);
+
+                    int shift = 0;
+                    char backupfd_buffer[FDSIZE * backup_fds.size() + 1];
+                    for (int fd: backup_fds){
+                        shift += snprintf(backupfd_buffer + shift, FDSIZE, "%d#", fd);
+                    }
+
                     char* argv[] = {
                                         (char*)executable.c_str(),
                                         (char*)(to_string(connection_socket).c_str()),
                                         command,
                                         (char*)(to_string(offset).c_str()),
-                                        (char*)(to_string(pipe_fd[READ]).c_str()),
-                                        (char*)(to_string(pipe_fd[WRITE]).c_str()),
+                                        pipefd_buffer,
+                                        (char*)(to_string(backup_fds.size()).c_str()),
+                                        backupfd_buffer,
                                         (char*)NULL
                                     };
                     execvp(argv[0], argv);
@@ -308,10 +372,10 @@ signed main(int argc, char* argv[])
                         if (server_terminate)                   /* SIGCHLD - Data Channel has Terminated */
                         {
                             if (server_success) {
-                                GREEN << data_channel << ":: DATA TRANSFER SUCCESSFUL"; RESET2;
+                                GREEN << getpid() << ":: DATA TRANSFER SUCCESSFUL"; RESET2;
                             }
                             if (server_failure) {
-                                RED << data_channel << ":: DATA TRANSFER FAILED"; RESET2;
+                                RED << getpid() << ":: DATA TRANSFER FAILED"; RESET2;
                             }
                             break;
                         }
@@ -341,6 +405,7 @@ signed main(int argc, char* argv[])
             while(!server_success and !server_failure);
 
             /* The connection channel exits after success or failure of transfer */
+            close(connection_socket);
             if(server_failure) exit(EXIT_FAILURE);
             if(server_success) exit(EXIT_SUCCESS);
         }
@@ -350,6 +415,7 @@ signed main(int argc, char* argv[])
                   << inet_ntoa(cli_addr.sin_addr) << "::" << ntohs(cli_addr.sin_port)
                   << " CONNECTED"; RESET2;
             connection_directory[conn_channel] = cli_addr;
+            close(connection_socket);
         }
     }
 
