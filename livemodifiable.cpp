@@ -249,6 +249,6 @@ int sendBackup(const int& socket, Data data, pid_t pid)
         }
     }
     CYAN << getpid() << ":: Sent Backup Packet of Length: ";
-    BLUE << ntohl(data.len); CYAN << " at Offset: "; BLUE << data.offset; RESET2;
+    BLUE << ntohl(data.len); CYAN << " at Offset: "; BLUE << ntohl(data.offset); RESET2;
     return ntohl(data.len);
 }

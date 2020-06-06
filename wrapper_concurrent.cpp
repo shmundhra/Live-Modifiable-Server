@@ -146,6 +146,21 @@ int HandleTermination(pid_t data_channel, int offset, sig_atomic_t success,
     }
 }
 
+vector <char*> BackupBuffer(vector<pair<int, sockaddr_in>> const& backup_nodes)
+{
+    vector<char*>backup_buffers;
+    for(int i = 0; i < backup_nodes.size(); i++)
+    {
+        char* buffer = (char*)calloc(FDSIZE + 3*BUFFSIZE + 1, sizeof(char));
+        snprintf(buffer, FDSIZE + 3*BUFFSIZE + 1, "%d-%hu-%hu-%lu", backup_nodes[i].first
+                                                                  , backup_nodes[i].second.sin_family
+                                                                  , backup_nodes[i].second.sin_port
+                                                                  , (long)backup_nodes[i].second.sin_addr.s_addr);
+        backup_buffers.push_back(buffer);
+    }
+    return backup_buffers;
+}
+
 signed main(int argc, char* argv[])
 {
     if (argc < 2) {
@@ -182,7 +197,7 @@ signed main(int argc, char* argv[])
         exit(EXIT_FAILURE);
     }
 
-    vector <int> backup_fds;
+    vector <pair<int, sockaddr_in>> backup_nodes;
     WHITE << getpid() << ":: Waiting for BACKUP NODES..."; RESET2;
     while(1)
     {
@@ -218,13 +233,16 @@ signed main(int argc, char* argv[])
                 }
                 else
                 {
+                    GREEN << getpid() << ":: BACKUP NODE @ "
+                          << inet_ntoa(cli_addr.sin_addr) << "::" << ntohs(cli_addr.sin_port); RESET2;
                     sendInfo(connection_socket,(char*)"Registered Node");
-                    backup_fds.push_back(connection_socket);
+                    backup_nodes.push_back({connection_socket, cli_addr});
                 }
             }
             if (FD_ISSET(STDIN_FILENO, &read_fds))
             {
-                GREEN << getpid() << ":: ACCEPTED ALL BACKUP NODES... "; RESET2;
+                char c; cin >> c;
+                GREEN << getpid() << ":: ACCEPTED " << backup_nodes.size() << " BACKUP NODES... "; RESET2;
                 break;
             }
         }
@@ -236,13 +254,14 @@ signed main(int argc, char* argv[])
         WHITE << getpid() << ":: Waiting for NEW CONNECTIONS..."; RESET2;
         while(1)
         {
-            fd_set read_fds; FD_ZERO(&read_fds); FD_SET(listening_socket, &read_fds);
+            fd_set read_fds; FD_ZERO(&read_fds);
+            FD_SET(listening_socket, &read_fds), FD_SET(STDIN_FILENO, &read_fds);
             timespec timeout = (timespec){.tv_sec = TIMEOUT, .tv_nsec = 0};
 
             WHITE << getpid() << ":: Waiting for EVENT..."; RESET2;
             int ready_fd = pselect(listening_socket+1, &read_fds, NULL, NULL, &timeout, &emptymask);
             if (ready_fd < 0) {
-                if (errno == EINTR and interrupt)
+                if (interrupt /*&& errno == EINTR*/)
                 {
                     interrupt = 0;
                     if (connection_terminate) {
@@ -263,14 +282,23 @@ signed main(int argc, char* argv[])
                 is_timeout = 1;
                 break;
             }
-            if (ready_fd > 0 and FD_ISSET(listening_socket, &read_fds))
+            if (ready_fd > 0)
             {
-                if ((connection_socket = accept(listening_socket,
-                                               reinterpret_cast<sockaddr*>(&cli_addr),
-                                               &cli_len)) < 0)
+                if (FD_ISSET(listening_socket, &read_fds))
                 {
-                    RED << getpid() << ":: "; perror("Error in Accepting Incoming Connection"); RESET1
-                } else {
+                    if ((connection_socket = accept(listening_socket,
+                                                    reinterpret_cast<sockaddr*>(&cli_addr),
+                                                    &cli_len)) < 0)
+                    {
+                        RED << getpid() << ":: "; perror("Error in Accepting Incoming Connection"); RESET1
+                    } else {
+                        break;
+                    }
+                }
+                if (FD_ISSET(STDIN_FILENO, &read_fds))
+                {   
+                    char c; cin >> c;
+                    is_timeout = 1;
                     break;
                 }
             }
@@ -307,7 +335,7 @@ signed main(int argc, char* argv[])
             }
 
             if (packet_type != PacketType::INFO) {
-                RED << getpid() << ":: INFO Packet Expected, " 
+                RED << getpid() << ":: INFO Packet Expected, "
                     << packet_type << " Packet Received." ; RESET2;
                 exit(EXIT_FAILURE);
             }
@@ -341,23 +369,20 @@ signed main(int argc, char* argv[])
                     char pipefd_buffer[FDSIZE + FDSIZE + 1];
                     snprintf(pipefd_buffer, FDSIZE + FDSIZE, "%d#%d", pipe_fd[READ], pipe_fd[WRITE]);
 
-                    int shift = 0;
-                    char backupfd_buffer[FDSIZE * backup_fds.size() + 1];
-                    for (int fd: backup_fds){
-                        shift += snprintf(backupfd_buffer + shift, FDSIZE, "%d#", fd);
-                    }
+                    vector<char*> argv = {
+                                            (char*)executable.c_str(),
+                                            (char*)(to_string(connection_socket).c_str()),
+                                            command,
+                                            (char*)(to_string(offset).c_str()),
+                                            pipefd_buffer,
+                                            (char*)(to_string(backup_nodes.size()).c_str())
+                                        };
+                    vector<char*> backup_info = BackupBuffer(backup_nodes);
+                    for (auto buffer: backup_info) argv.push_back(buffer);
+                    argv.push_back((char*)NULL);
 
-                    char* argv[] = {
-                                        (char*)executable.c_str(),
-                                        (char*)(to_string(connection_socket).c_str()),
-                                        command,
-                                        (char*)(to_string(offset).c_str()),
-                                        pipefd_buffer,
-                                        (char*)(to_string(backup_fds.size()).c_str()),
-                                        backupfd_buffer,
-                                        (char*)NULL
-                                    };
-                    execvp(argv[0], argv);
+                    execvp(argv[0], &argv[0]);
+
                     RED << "execvp() has Returned"; RESET2;
                     if (sendError(connection_socket, (char*)string("Server Failed").c_str()) < 0){
                         RED << getpid() << ":: "; perror("Error in Sending Error Message"); RESET2;

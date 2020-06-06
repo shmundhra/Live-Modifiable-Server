@@ -1,6 +1,6 @@
 #include "livemodifiable.h"
 
-#define BACKUP_FD 1
+#define BACKUP_FD 0
 
 static volatile sig_atomic_t interrupt(0);
 static void sig_handler(int signo)
@@ -13,7 +13,7 @@ static void sig_handler(int signo)
 
 bool success(0), failure(0);
 
-void GET(int socket, char* file, int& offset, int pipe_fd[2], vector<int> const& backup_fd)
+void GET(int socket, char* file, int& offset, int pipe_fd[2], vector <pair<int, sockaddr_in>> const& backup_nodes)
 {
     /* Install Data Producer - Open File */
     int fd = open(file, O_RDONLY);
@@ -117,11 +117,14 @@ void GET(int socket, char* file, int& offset, int pipe_fd[2], vector<int> const&
     return;
 }
 
-void PUT(int socket, char* file, int& offset, int pipe_fd[2], vector<int> const& backup_fd)
+void PUT(int socket, char* file, int& offset, int pipe_fd[2], vector <pair<int, sockaddr_in>> const& backup_nodes)
 {
     /* Install Data Consumer */
-    int backup_socket = backup_fd[BACKUP_FD];
+    int backup_socket = backup_nodes[BACKUP_FD].first;
+    sockaddr_in node_addr = backup_nodes[BACKUP_FD].second;
     sendInfo(backup_socket, (char*)"Sending Data for Backup");
+    GREEN << getppid() << ":: " << "SENDING BACKUP to NODE @ "
+          << inet_ntoa(node_addr.sin_addr) << "::" << ntohs(node_addr.sin_port); RESET2;
 
     int recv_, consume;
     while(!failure and !success and !interrupt)
@@ -169,7 +172,7 @@ void PUT(int socket, char* file, int& offset, int pipe_fd[2], vector<int> const&
                                             break;
                                         }
                                         if (recv_ == 0) {
-                                            GREEN << "FILE TRANSFER is COMPLETE"; RESET2;
+                                            GREEN << getpid() << ":: FILE TRANSFER is COMPLETE"; RESET2;
                                             success = 1;
                                             break;
                                         }
@@ -231,17 +234,17 @@ signed main(int argc, char* argv[])
     int backupfd_num;
     sscanf(argv[5], "%d", &backupfd_num);
 
-    int fd, bytes, shift(0);
-    vector <int> backup_fd;
-    while(backup_fd.size() < backupfd_num)
+    vector <pair<int, sockaddr_in>> backup_nodes;
+    for (int i = 0; i < backupfd_num; i++)
     {
-        sscanf(argv[6] + shift, "%d#%n", &fd, &bytes);
-        backup_fd.push_back(fd);
-        shift += bytes;
+        int fd; sockaddr_in node_addr;
+        sscanf(argv[6+i], "%d-%hu-%hu-%lu", &fd, &node_addr.sin_family, &node_addr.sin_port,
+                                            (long*)&node_addr.sin_addr.s_addr);
+        backup_nodes.push_back({fd, node_addr});
     }
 
-    if (!strcmp(action, "GET")) GET(socket, filename, offset, pipefd, backup_fd);
-    if (!strcmp(action, "PUT")) PUT(socket, filename, offset, pipefd, backup_fd);
+    if (!strcmp(action, "GET")) GET(socket, filename, offset, pipefd, backup_nodes);
+    if (!strcmp(action, "PUT")) PUT(socket, filename, offset, pipefd, backup_nodes);
 
     /* Send 'offset' to wrapper as marker to start transfer in next execvp */
     if(interrupt == 1 and success != 1 and failure != 1)
