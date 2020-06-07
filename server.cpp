@@ -122,7 +122,9 @@ void PUT(int socket, char* file, int& offset, int pipe_fd[2], vector <pair<int, 
     /* Install Data Consumer */
     int backup_socket = backup_nodes[BACKUP_FD].first;
     sockaddr_in node_addr = backup_nodes[BACKUP_FD].second;
-    sendInfo(backup_socket, (char*)"Sending Data for Backup");
+
+    string Command("PUT " + string(file));
+    sendBackupInfo(backup_socket, (char*)(Command.c_str()), getppid());
     GREEN << getppid() << ":: " << "SENDING BACKUP to NODE @ "
           << inet_ntoa(node_addr.sin_addr) << "::" << ntohs(node_addr.sin_port); RESET2;
 
@@ -178,7 +180,7 @@ void PUT(int socket, char* file, int& offset, int pipe_fd[2], vector <pair<int, 
                                         }
 
                                         /* Consume the Produce Received */
-                                        if ((consume = sendBackup(backup_socket, Data(recv_, recv_offset, data), getppid())) < 0)
+                                        if ((consume = sendBackupData(backup_socket, Data(recv_, recv_offset, data), getppid())) < 0)
                                         {
                                             RED << getpid() << ":: "; perror("Error in Sending Backup"); RESET1
                                             if (sendError(socket, (char*)string("Error in Sending Backup").c_str()) < 0) {

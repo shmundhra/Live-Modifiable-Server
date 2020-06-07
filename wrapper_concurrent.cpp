@@ -234,7 +234,7 @@ signed main(int argc, char* argv[])
                 {
                     GREEN << getpid() << ":: BACKUP NODE @ "
                           << inet_ntoa(cli_addr.sin_addr) << "::" << ntohs(cli_addr.sin_port); RESET2;
-                    sendInfo(connection_socket,(char*)"Registered Node");
+                    sendInfo(connection_socket, (char*)"Registered Node");
                     backup_nodes.push_back({connection_socket, cli_addr});
                 }
             }

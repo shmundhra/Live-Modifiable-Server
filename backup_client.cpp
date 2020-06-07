@@ -23,6 +23,7 @@ signed main(int argc, char* argv[])
     GREEN << getpid() << ":: CONNECTED to SERVER..."; RESET2;
 
     int recv_ = 0;
+    map<pid_t, string> file;
     while(1)
     {
         WHITE << "WAITING for Packet..."; RESET2;
@@ -38,37 +39,63 @@ signed main(int argc, char* argv[])
 
         switch (packet_type)
         {
-            case PacketType::INFO   :{
-                                        char* info_msg = (char*)calloc(INFOSIZE+1, sizeof(char));
-                                        if (recvInfo(socket_fd, info_msg) < 0)
-                                        {
-                                            RED << getpid() << ":: "; perror("Error in Receiving Info Packet"); RESET1
-                                            exit(EXIT_FAILURE);
-                                        }
-                                        free(info_msg);
-                                        break;
+            case INFO         :{
+                                    char* info_msg = (char*)calloc(INFOSIZE+1, sizeof(char));
+                                    if (recvInfo(socket_fd, info_msg) < 0)
+                                    {
+                                        RED << getpid() << ":: "; perror("Error in Receiving Info Packet"); RESET1
+                                        exit(EXIT_FAILURE);
                                     }
-            case PacketType::DATA   :{
-                                        pid_t pid; int offset;
-                                        char* data = (char*)calloc(DATASIZE+1, sizeof(char));
-                                        if ((recv_ = recvBackup(socket_fd, &offset, data, &pid)) < 0) {
-                                            RED << getpid() << ":: "; perror("Error in Receiving Backup"); RESET1;
-                                            continue;
-                                        }
 
-                                        int fd = open((char*)(to_string(pid).c_str()), O_WRONLY | O_CREAT | O_APPEND);
-                                        if (fd < 0) {
-                                            RED << getpid() << ":: "; perror("Error in Opening Backup File"); RESET1
-                                            continue;
-                                        }
-                                        if (write(fd, data, recv_) < 0) {
-                                            RED << getpid() << ":: "; perror("Error in Writing to Backup File"); RESET1
-                                            continue;
-                                        }
-
-                                        free(data);
-                                        break;
+                                    free(info_msg);
+                                    break;
+                               }
+            case BACKUPINFO   :{
+                                    pid_t pid;
+                                    char* info_msg = (char*)calloc(INFOSIZE+1, sizeof(char));
+                                    if (recvBackupInfo(socket_fd, info_msg, &pid) < 0)
+                                    {
+                                        RED << getpid() << ":: "; perror("Error in Receiving Backup Info"); RESET1
+                                        exit(EXIT_FAILURE);
                                     }
+                                    char action[] = {0, 0, 0, 0};
+                                    char filename[FILESIZE+1];
+                                    bzero(filename, (FILESIZE+1)*sizeof(char));
+                                    sscanf(info_msg, "%s %s", action, filename);
+                                    file[pid] = "BACKUP_" + string(filename);
+
+                                    int fd = open((char*)(file[pid].c_str()), O_CREAT | O_APPEND);
+                                    if (fd < 0) {
+                                        RED << getpid() << ":: " << file[pid]; perror(" Error in Creating"); RESET1
+                                        continue;
+                                    }
+                                    close(fd);
+
+                                    free(info_msg);
+                                    break;
+                                }
+            case BACKUPDATA   :{
+                                    pid_t pid; int offset;
+                                    char* data = (char*)calloc(DATASIZE+1, sizeof(char));
+                                    if ((recv_ = recvBackupData(socket_fd, &offset, data, &pid)) < 0) {
+                                        RED << getpid() << ":: "; perror("Error in Receiving Backup Data"); RESET1;
+                                        continue;
+                                    }
+
+                                    int fd = open((char*)(file[pid].c_str()), O_WRONLY | O_APPEND);
+                                    if (fd < 0) {
+                                        RED << getpid() << ":: " << file[pid]; perror(" Error in Opening"); RESET1
+                                        continue;
+                                    }
+                                    if (write(fd, data, recv_) < 0) {
+                                        RED << getpid() << ":: "; perror("Error in Writing to Backup File"); RESET1
+                                        continue;
+                                    }
+                                    close(fd);
+
+                                    free(data);
+                                    break;
+                                }
         }
     }
     exit(EXIT_SUCCESS);

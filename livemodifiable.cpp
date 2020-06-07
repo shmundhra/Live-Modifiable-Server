@@ -1,30 +1,5 @@
 #include "livemodifiable.h"
 
-Data::Data() = default;
-Data::Data(int packet_len, int packet_offset, char* packet_data)
-{
-    type = htonl(PacketType::DATA);
-    len = htonl(packet_len);
-    offset = htonl(packet_offset);
-
-    bzero(data, DATASIZE * sizeof(char));
-    memcpy(data, packet_data, packet_len);
-}
-
-Ack::Ack() = default;
-Ack::Ack(int next_offset)
-{
-    type = htonl(PacketType::ACK);
-    offset = htonl(next_offset);
-}
-
-Backup::Backup() = default;
-Backup::Backup(Data backup_data, pid_t server_pid)
-{
-    data = backup_data;
-    pid = htonl(server_pid);
-}
-
 Error::Error() = default;
 Error::Error(int packet_len, char* packet_msg)
 {
@@ -45,19 +20,55 @@ Info::Info(int packet_len, char* packet_msg)
     memcpy(msg, packet_msg, packet_len);
 }
 
+Data::Data() = default;
+Data::Data(int packet_len, int packet_offset, char* packet_data)
+{
+    type = htonl(PacketType::DATA);
+    len = htonl(packet_len);
+    offset = htonl(packet_offset);
+
+    bzero(data, DATASIZE * sizeof(char));
+    memcpy(data, packet_data, packet_len);
+}
+
+Ack::Ack() = default;
+Ack::Ack(int next_offset)
+{
+    type = htonl(PacketType::ACK);
+    offset = htonl(next_offset);
+}
+
+BackupData::BackupData() = default;
+BackupData::BackupData(Data backup_data, pid_t server_pid)
+{   
+    data = backup_data;
+    data.type = htonl(PacketType::BACKUPDATA);
+    pid = htonl(server_pid);
+}
+
+BackupInfo::BackupInfo() = default;
+BackupInfo::BackupInfo(Info backup_info, pid_t server_pid)
+{
+    info = backup_info;
+    info.type = htonl(PacketType::BACKUPINFO);
+    pid = htonl(server_pid);
+}
+
 ostream& operator <<(ostream& os, PacketType& packet_type)
 {
     switch(packet_type)
     {
-        case PacketType::DATA : return os << "DATA";
-        case PacketType::ACK  : return os << "ACK";
-        case PacketType::ERROR: return os << "ERROR";
-        case PacketType::INFO : return os << "INFO";
+        case PacketType::DATA       : return os << "DATA";
+        case PacketType::ACK        : return os << "ACK";
+        case PacketType::ERROR      : return os << "ERROR";
+        case PacketType::INFO       : return os << "INFO";
+        case PacketType::BACKUPDATA : return os << "BACKUP DATA";
+        case PacketType::BACKUPINFO : return os << "BACKUP INFO";
         default: return os << "Invalid";
     }
 }
 
-int assignType(PacketType& packet_type, int type)
+static int assignType(PacketType& packet_type, int type)
 {
     switch(type)
     {
@@ -65,12 +76,13 @@ int assignType(PacketType& packet_type, int type)
         case 2: packet_type = PacketType(PacketType::DATA);  break;
         case 3: packet_type = PacketType(PacketType::ACK);  break;
         case 4: packet_type = PacketType(PacketType::INFO);  break;
+        case 5: packet_type = PacketType(PacketType::BACKUPDATA);  break;
+        case 6: packet_type = PacketType(PacketType::BACKUPINFO);  break;
         default: RED << "Can't recognize packet type - " << type; RESET2;
                  return -1;
     }
     return 0;
 }
-
 
 int recvType(const int& socket, PacketType& packet_type)
 {
@@ -155,19 +167,35 @@ int recvAck(const int& socket, int* offset)
     return sizeof(offset);
 }
 
-int recvBackup(const int& socket, int* offset, char* data, pid_t* pid)
+int recvBackupData(const int& socket, int* offset, char* data, pid_t* pid)
 {
     int len;
     if ((len = recvData(socket, offset, data)) < 0) {
         return -1;
     }
-
     if (recv(socket, reinterpret_cast<void*>(pid), sizeof(pid_t), MSG_WAITALL) < 0) {
         return -1;
     }
     *pid = ntohl(*pid);
 
-    CYAN << getpid() << ":: Received Backup From " << *pid; RESET2;
+    CYAN << getpid() << ":: Received Backup Data From: "; BLUE << *pid; RESET2;
+    return len;
+}
+
+int recvBackupInfo(const int& socket, char* info_msg, pid_t* pid)
+{
+    int len;
+    if ((len = recvInfo(socket, info_msg)) < 0) {
+        return -1;
+    }
+    if (recv(socket, reinterpret_cast<void*>(pid), sizeof(pid_t), MSG_WAITALL) < 0) {
+        return -1;
+    }
+    *pid = ntohl(*pid);
+
+    CYAN << getpid() << ":: Received Backup Info of Message: "; BLUE << info_msg;
+    CYAN << " From: "; BLUE << *pid; RESET2;
+    
     return len;
 }
 
@@ -236,19 +264,35 @@ int sendAck(const int& socket, int offset)
     return sizeof(offset);
 }
 
-int sendBackup(const int& socket, Data data, pid_t pid)
+int sendBackupData(const int& socket, Data data, pid_t pid)
 {
-    Backup* backup_packet = new Backup(data, pid);
+    BackupData* backup_packet = new BackupData(data, pid);
 
     int send_ = 0;
-    for(int total_send = 0; total_send < sizeof(Backup); total_send += send_)
+    for(int total_send = 0; total_send < sizeof(BackupData); total_send += send_)
     {
         if((send_ = send(socket, reinterpret_cast<void*>((char*)backup_packet + total_send),
-                         sizeof(Backup)-total_send, 0)) < 0) {
+                         sizeof(BackupData)-total_send, 0)) < 0) {
             return -1;
         }
     }
-    CYAN << getpid() << ":: Sent Backup Packet of Length: ";
+    CYAN << getpid() << ":: Sent Backup Data Packet of Length: ";
     BLUE << ntohl(data.len); CYAN << " at Offset: "; BLUE << ntohl(data.offset); RESET2;
     return ntohl(data.len);
+}
+
+int sendBackupInfo(const int& socket, char* info_msg, pid_t pid)
+{
+    BackupInfo* backup_packet = new BackupInfo(Info(strlen(info_msg), info_msg), pid);
+
+    int send_ = 0;
+    for(int total_send = 0; total_send < sizeof(BackupInfo); total_send += send_)
+    {
+        if((send_ = send(socket, reinterpret_cast<void*>((char*)backup_packet + total_send),
+                         sizeof(BackupInfo)-total_send, 0)) < 0) {
+            return -1;
+        }
+    }
+    CYAN << getpid() << ":: Sent Backup Info Packet: "; BLUE << info_msg; RESET2;
+    return strlen(info_msg);
 }

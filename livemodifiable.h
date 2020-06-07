@@ -47,33 +47,9 @@ enum PacketType {
     ERROR = 1,
     DATA = 2,
     ACK = 3,
-    INFO = 4
-};
-
-struct Data {
-    int type;
-    int len;
-    int offset;
-    char data[DATASIZE];
-
-    Data();
-    Data(int packet_len, int packet_offset, char* packet_data);
-};
-
-struct Ack {
-    int type;
-    int offset;
-
-    Ack();
-    Ack(int next_offset);
-};
-
-struct Backup {
-    Data data;
-    pid_t pid;
-
-    Backup();
-    Backup(Data backup_data, pid_t server_pid);
+    INFO = 4,
+    BACKUPDATA = 5,
+    BACKUPINFO = 6,
 };
 
 struct Error {
@@ -94,21 +70,57 @@ struct Info {
     Info(int packet_len, char* packet_msg);
 };
 
+struct Data {
+    int type;
+    int len;
+    int offset;
+    char data[DATASIZE];
+
+    Data();
+    Data(int packet_len, int packet_offset, char* packet_data);
+};
+
+struct Ack {
+    int type;
+    int offset;
+
+    Ack();
+    Ack(int next_offset);
+};
+
+struct BackupData {
+    Data data;
+    pid_t pid;
+
+    BackupData();
+    BackupData(Data backup_data, pid_t server_pid);
+};
+
+struct BackupInfo {
+    Info info;
+    pid_t pid;
+
+    BackupInfo();
+    BackupInfo(Info backup_info, pid_t server_pid);
+};
+
 ostream& operator <<(ostream& os, PacketType& packet_type);
 
-int assignType(PacketType& packet_type, int type);
+static int assignType(PacketType& packet_type, int type);
 int recvType(const int& socket, PacketType& packet_type);
 
 int recvError(const int& socket, char* error_msg);
 int recvInfo(const int& socket, char* info_msg);
 int recvData(const int& socket, int *offset, char* data);
 int recvAck(const int& socket, int* offset);
-int recvBackup(const int& socket, int* offset, char* data, pid_t* pid);
+int recvBackupData(const int& socket, int* offset, char* data, pid_t* pid);
+int recvBackupInfo(const int& socket, char* info_msg, pid_t* pid);
 
 int sendError(const int& socket, char* error_msg);
 int sendInfo(const int& socket, char* info_msg);
 int sendData(const int& socket, int len, int offset, char* data);
 int sendAck(const int& socket, int offset);
-int sendBackup(const int& socket, Data data, pid_t pid);
+int sendBackupData(const int& socket, Data data, pid_t pid);
+int sendBackupInfo(const int& socket, char* info_msg, pid_t pid);
 
 #endif

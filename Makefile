@@ -68,4 +68,4 @@ clean	:
 	clear
 
 remove	:
-	rm -f server.o get_client.o put_client.o bup_client.o lm_server.o livemodifiable.o livemodifiable.h.gch liblms.a
+	rm -f BACKUP_* server.o get_client.o put_client.o bup_client.o lm_server.o livemodifiable.o livemodifiable.h.gch liblms.a
