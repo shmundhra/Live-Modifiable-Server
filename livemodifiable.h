@@ -21,7 +21,7 @@ using namespace std;
 
 #define PORT 10000
 #define SIGMODIFY SIGUSR1
-#define TIMEOUT 60
+#define TIMEOUT 600
 #define EXIT_PAUSED 10
 #define READ 0
 #define WRITE 1

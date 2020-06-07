@@ -4,7 +4,7 @@ signed main(int argc, char* argv[])
 {
     signal(SIGINT, SIG_IGN);
 
-    string IP_ADDRESS("127.0.0.1");
+    string IP_ADDRESS("10.0.0.1");
     if (argc >= 2) {
         IP_ADDRESS = argv[1];
     }
@@ -20,6 +20,7 @@ signed main(int argc, char* argv[])
         RED << getpid() << ":: "; perror("Error in Connecting to TCP Server"); RESET1
         exit(EXIT_FAILURE);
     }
+    sleep(5);
     GREEN << getpid() << ":: CONNECTED to SERVER..."; RESET2;
 
     int recv_ = 0;

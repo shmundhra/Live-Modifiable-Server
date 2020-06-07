@@ -66,7 +66,7 @@ int CreateSocket()
 
 int BindSocket(int socket, sockaddr_in& server_addr)
 {
-    server_addr = {AF_INET, htons(PORT), inet_addr("127.0.0.1"), sizeof(sockaddr_in)};
+    server_addr = {AF_INET, htons(PORT), inet_addr("10.0.0.1"), sizeof(sockaddr_in)};
     server_addr.sin_addr.s_addr = INADDR_ANY;
     if (bind(socket, reinterpret_cast<struct sockaddr *>(&server_addr), sizeof(server_addr)) < 0) {
         RED << getpid() << ":: "; perror("Error in binding Listening Socket"); RESET1
@@ -234,6 +234,7 @@ signed main(int argc, char* argv[])
                 {
                     GREEN << getpid() << ":: BACKUP NODE @ "
                           << inet_ntoa(cli_addr.sin_addr) << "::" << ntohs(cli_addr.sin_port); RESET2;
+                    sleep(5);
                     sendInfo(connection_socket, (char*)"Registered Node");
                     backup_nodes.push_back({connection_socket, cli_addr});
                 }
@@ -291,6 +292,7 @@ signed main(int argc, char* argv[])
                     {
                         RED << getpid() << ":: "; perror("Error in Accepting Incoming Connection"); RESET1
                     } else {
+                        sleep(5);
                         break;
                     }
                 }

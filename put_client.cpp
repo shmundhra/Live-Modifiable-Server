@@ -25,7 +25,7 @@ signed main(int argc, char* argv[])
         exit(EXIT_FAILURE);
     }
 
-    string IP_ADDRESS("127.0.0.1");
+    string IP_ADDRESS("10.0.0.1");
     if (argc >= 3) {
         IP_ADDRESS = argv[2];
     }
@@ -41,6 +41,7 @@ signed main(int argc, char* argv[])
         RED << getpid() << ":: "; perror("Error in Connecting to TCP Server"); RESET1
         exit(EXIT_FAILURE);
     }
+    sleep(5);
     GREEN << getpid() << ":: CONNECTED to SERVER..."; RESET2;
 
     string Command("PUT " + FileName);

@@ -114,7 +114,7 @@ int recvError(const int& socket, char* error_msg)
         return -1;
     }
     CYAN << getpid() << ":: Received Error Packet of Message: "; RED << error_msg; RESET2;
-
+    sleep(5);
     return ntohl(len);
 }
 
@@ -130,7 +130,7 @@ int recvInfo(const int& socket, char* info_msg)
         return -1;
     }
     CYAN << getpid() << ":: Received Info Packet of Message: "; BLUE << info_msg; RESET2;
-
+    sleep(5);
     return ntohl(len);
 }
 
@@ -151,7 +151,7 @@ int recvData(const int& socket, int* offset, char* data)
     }
     CYAN << getpid() << ":: Received Data Packet at Offset: ";
     BLUE << *offset << "\n" << data; RESET2;
-
+    sleep(5);
     return ntohl(len);
 }
 
@@ -163,7 +163,7 @@ int recvAck(const int& socket, int* offset)
     *offset = ntohl(*offset);
     CYAN << getpid() << ":: Received Ack Packet with offset: ";
     BLUE << *offset; RESET2;
-
+    sleep(5);
     return sizeof(offset);
 }
 
@@ -179,6 +179,7 @@ int recvBackupData(const int& socket, int* offset, char* data, pid_t* pid)
     *pid = ntohl(*pid);
 
     CYAN << getpid() << ":: Received Backup Data From: "; BLUE << *pid; RESET2;
+    sleep(5);
     return len;
 }
 
@@ -195,7 +196,7 @@ int recvBackupInfo(const int& socket, char* info_msg, pid_t* pid)
 
     CYAN << getpid() << ":: Received Backup Info of Message: "; BLUE << info_msg;
     CYAN << " From: "; BLUE << *pid; RESET2;
-    
+    sleep(5);
     return len;
 }
 
@@ -212,6 +213,7 @@ int sendError(const int& socket, char* error_msg)
         }
     }
     CYAN << getpid() << ":: Sent Error Packet: "; RED << error_msg; RESET2;
+    sleep(5);
     return strlen(error_msg);
 }
 
@@ -228,6 +230,7 @@ int sendInfo(const int& socket, char* info_msg)
         }
     }
     CYAN << getpid() << ":: Sent Info Packet: "; BLUE << info_msg; RESET2;
+    sleep(5);
     return strlen(info_msg);
 }
 
@@ -245,6 +248,7 @@ int sendData(const int& socket, int len, int offset, char* data)
     }
     CYAN << getpid() << ":: Sent Data Packet of Length: ";
     BLUE << len; CYAN << " at Offset: "; BLUE << offset; RESET2;
+    sleep(5);
     return len;
 }
 
@@ -261,6 +265,7 @@ int sendAck(const int& socket, int offset)
         }
     }
     CYAN << getpid() << ":: Sent Ack Packet with Offset: "; BLUE << offset; RESET2;
+    sleep(5);
     return sizeof(offset);
 }
 
@@ -278,6 +283,7 @@ int sendBackupData(const int& socket, Data data, pid_t pid)
     }
     CYAN << getpid() << ":: Sent Backup Data Packet of Length: ";
     BLUE << ntohl(data.len); CYAN << " at Offset: "; BLUE << ntohl(data.offset); RESET2;
+    sleep(5);
     return ntohl(data.len);
 }
 
@@ -294,5 +300,6 @@ int sendBackupInfo(const int& socket, char* info_msg, pid_t pid)
         }
     }
     CYAN << getpid() << ":: Sent Backup Info Packet: "; BLUE << info_msg; RESET2;
+    sleep(5);
     return strlen(info_msg);
 }

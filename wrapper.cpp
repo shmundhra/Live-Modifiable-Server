@@ -65,7 +65,7 @@ signed main(int argc, char* argv[])
     if (setsockopt(listening_socket, SOL_SOCKET, SO_REUSEADDR, enable, sizeof(enable)) < 0) {
         RED << getpid() << ":: "; perror("Error in setting socket option to enable Reuse of Address"); RESET1
     }
-    sockaddr_in serv_addr = {AF_INET, htons(PORT), inet_addr("127.0.0.1"), sizeof(sockaddr_in)};
+    sockaddr_in serv_addr = {AF_INET, htons(PORT), inet_addr("10.0.0.1"), sizeof(sockaddr_in)};
     serv_addr.sin_addr.s_addr = INADDR_ANY;
     if (bind(listening_socket, reinterpret_cast<struct sockaddr *>(&serv_addr), sizeof(serv_addr)) < 0) {
         RED << getpid() << ":: "; perror("Error in binding Listening Socket"); RESET1

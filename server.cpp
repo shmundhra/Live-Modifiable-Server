@@ -1,6 +1,6 @@
 #include "livemodifiable.h"
 
-#define BACKUP_FD 0
+#define BACKUP_FD 1
 
 static volatile sig_atomic_t interrupt(0);
 static void sig_handler(int signo)
