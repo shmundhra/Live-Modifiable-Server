@@ -11,17 +11,17 @@ signed main(int argc, char* argv[])
 
     int socket_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (socket_fd < 0) {
-        RED << getpid() << ":: "; perror("Error in Creating Connection Socket"); RESET1
+        RED << LOG; perror("Error in Creating Connection Socket"); RESET1
         exit(EXIT_FAILURE);
     }
 
     sockaddr_in serv_addr = {AF_INET, htons(PORT), inet_addr(IP_ADDRESS.c_str()), sizeof(sockaddr_in)};
     if (connect(socket_fd, reinterpret_cast<sockaddr*>(&serv_addr), sizeof(serv_addr)) < 0) {
-        RED << getpid() << ":: "; perror("Error in Connecting to TCP Server"); RESET1
+        RED << LOG; perror("Error in Connecting to TCP Server"); RESET1
         exit(EXIT_FAILURE);
     }
     if (EMULATING) sleep(5);
-    GREEN << getpid() << ":: CONNECTED to SERVER..."; RESET2;
+    GREEN << LOG << "CONNECTED to SERVER..."; RESET2;
 
     int recv_ = 0;
     map<pid_t, string> file;
@@ -30,11 +30,11 @@ signed main(int argc, char* argv[])
         WHITE << "WAITING for Packet..."; RESET2;
         PacketType packet_type;
         if ((recv_ = recvType(socket_fd, packet_type)) < 0) {
-            RED << getpid() << ":: "; perror("Error in Receiving Packet Type"); RESET1
+            RED << LOG; perror("Error in Receiving Packet Type"); RESET1
             exit(EXIT_FAILURE);
         }
         if (recv_ == 0) {
-            GREEN << getpid() << ":: SERVER TERMINATED CONNECTION"; RESET2;
+            GREEN << LOG << "SERVER TERMINATED CONNECTION"; RESET2;
             break;
         }
 
@@ -44,7 +44,7 @@ signed main(int argc, char* argv[])
                                     char* info_msg = (char*)calloc(INFOSIZE+1, sizeof(char));
                                     if (recvInfo(socket_fd, info_msg) < 0)
                                     {
-                                        RED << getpid() << ":: "; perror("Error in Receiving Info Packet"); RESET1
+                                        RED << LOG; perror("Error in Receiving Info Packet"); RESET1
                                         exit(EXIT_FAILURE);
                                     }
 
@@ -56,7 +56,7 @@ signed main(int argc, char* argv[])
                                     char* info_msg = (char*)calloc(INFOSIZE+1, sizeof(char));
                                     if (recvBackupInfo(socket_fd, info_msg, &pid) < 0)
                                     {
-                                        RED << getpid() << ":: "; perror("Error in Receiving Backup Info"); RESET1
+                                        RED << LOG; perror("Error in Receiving Backup Info"); RESET1
                                         exit(EXIT_FAILURE);
                                     }
                                     char action[] = {0, 0, 0, 0};
@@ -67,7 +67,7 @@ signed main(int argc, char* argv[])
 
                                     int fd = open((char*)(file[pid].c_str()), O_CREAT | O_APPEND);
                                     if (fd < 0) {
-                                        RED << getpid() << ":: " << file[pid]; perror(" Error in Creating"); RESET1
+                                        RED << LOG << file[pid]; perror(" Error in Creating"); RESET1
                                         continue;
                                     }
                                     close(fd);
@@ -79,17 +79,17 @@ signed main(int argc, char* argv[])
                                     pid_t pid; int offset;
                                     char* data = (char*)calloc(DATASIZE+1, sizeof(char));
                                     if ((recv_ = recvBackupData(socket_fd, &offset, data, &pid)) < 0) {
-                                        RED << getpid() << ":: "; perror("Error in Receiving Backup Data"); RESET1;
+                                        RED << LOG; perror("Error in Receiving Backup Data"); RESET1;
                                         continue;
                                     }
 
                                     int fd = open((char*)(file[pid].c_str()), O_WRONLY | O_APPEND);
                                     if (fd < 0) {
-                                        RED << getpid() << ":: " << file[pid]; perror(" Error in Opening"); RESET1
+                                        RED << LOG << file[pid]; perror(" Error in Opening"); RESET1
                                         continue;
                                     }
                                     if (write(fd, data, recv_) < 0) {
-                                        RED << getpid() << ":: "; perror("Error in Writing to Backup File"); RESET1
+                                        RED << LOG; perror("Error in Writing to Backup File"); RESET1
                                         continue;
                                     }
                                     close(fd);

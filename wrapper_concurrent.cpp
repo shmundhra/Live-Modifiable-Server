@@ -51,16 +51,16 @@ int CreateSocket()
 {
     int socket_fd;
     if ((socket_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-        RED << getpid() << ":: "; perror("Error in Creating Listening Socket"); RESET1
+        RED << LOG; perror("Error in Creating Listening Socket"); RESET1
         return -1;
     }
 
     const int enable = 1;
      if (setsockopt(socket_fd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(enable)) < 0) {
-        RED << getpid() << ":: "; perror("Error in setting socket option to enable Reuse of Address"); RESET1
+        RED << LOG; perror("Error in setting socket option to enable Reuse of Address"); RESET1
     }
     if (setsockopt(socket_fd, SOL_SOCKET, SO_REUSEPORT, &enable, sizeof(enable)) < 0) {
-        RED << getpid() << ":: "; perror("Error in setting socket option to enable Reuse of Port"); RESET1
+        RED << LOG; perror("Error in setting socket option to enable Reuse of Port"); RESET1
     }
 
     return socket_fd;
@@ -73,7 +73,7 @@ int BindSocket(int socket, sockaddr_in& server_addr)
     server_addr = {AF_INET, htons(PORT), inet_addr(IP_ADDR), sizeof(sockaddr_in)};
     server_addr.sin_addr.s_addr = INADDR_ANY;
     if (bind(socket, reinterpret_cast<struct sockaddr *>(&server_addr), sizeof(server_addr)) < 0) {
-        RED << getpid() << ":: "; perror("Error in binding Listening Socket"); RESET1
+        RED << LOG; perror("Error in binding Listening Socket"); RESET1
         return -1;
     }
     return 0;
@@ -85,7 +85,7 @@ int TerminateChannel(map <pid_t, sockaddr_in>& directory)
 {
     pid_t channel_pid = wait(NULL);
     if (channel_pid < 0) return -1;
-    GREEN << getpid() << ":: CLIENT @ "
+    GREEN << LOG << "CLIENT @ "
           << inet_ntoa(directory[channel_pid].sin_addr)
           << "::" << ntohs(directory[channel_pid].sin_port)
           << " DISCONNECTED"; RESET2
@@ -99,7 +99,7 @@ int BlockSignal(int signo)
 {
     sigset_t sigmask; sigemptyset(&sigmask); sigaddset(&sigmask, signo);
     if (sigprocmask(SIG_BLOCK, &sigmask, NULL) < 0){
-        RED << getpid() << ":: "; perror("Error in Blocking Signal");
+        RED << LOG; perror("Error in Blocking Signal");
         return -1;
     }
     return 0;
@@ -111,7 +111,7 @@ int UnblockSignal(int signo)
 {
     sigset_t sigmask; sigemptyset(&sigmask); sigaddset(&sigmask, signo);
     if (sigprocmask(SIG_UNBLOCK, &sigmask, NULL) < 0){
-        RED << getpid() << ":: "; perror("Error in Unblocking Signal");
+        RED << LOG; perror("Error in Unblocking Signal");
         return -1;
     }
     return 0;
@@ -123,7 +123,7 @@ int UnblockAllSignal()
 {
     sigset_t emptymask; sigemptyset(&emptymask);
     if (sigprocmask(SIG_SETMASK, &emptymask, NULL) < 0){
-        RED << getpid() << ":: "; perror("Error in Clearing SIGMASK");
+        RED << LOG; perror("Error in Clearing SIGMASK");
         return -1;
     }
     return 0;
@@ -156,7 +156,7 @@ int HandleTermination(pid_t data_channel, int offset)
         RED << data_channel << ":: DATA CHANNEL FAILED"; RESET2;
     }
     if (server_paused){
-        BLUE << getpid() << ":: RECEIVED " << offset << " from DATA CHANNEL " << data_channel; RESET2;
+        BLUE << LOG << "RECEIVED " << offset << " from DATA CHANNEL " << data_channel; RESET2;
     }
 }
 
@@ -180,7 +180,7 @@ vector <char*> BackupBuffer(vector<pair<int, sockaddr_in>> const& backup_nodes)
 signed main(int argc, char* argv[])
 {
     if (argc < 2) {
-        RED << "Please Enter Path of Server Executable"; RESET2;
+        RED << LOG << "Please Enter Path of Server Executable"; RESET2;
         exit(EXIT_FAILURE);
     }
     string executable(argv[1]);
@@ -209,19 +209,19 @@ signed main(int argc, char* argv[])
     }
 
     if (listen(listening_socket, 10) < 0) {
-        RED << getpid() << ":: "; perror("Error in Listening on Listening Socket"); RESET1
+        RED << LOG; perror("Error in Listening on Listening Socket"); RESET1
         exit(EXIT_FAILURE);
     }
 
     vector <pair<int, sockaddr_in>> backup_nodes;
-    WHITE << getpid() << ":: Waiting for BACKUP NODES..."; RESET2;
+    WHITE << LOG << "Waiting for BACKUP NODES..."; RESET2;
     while(1)
     {
         fd_set read_fds; FD_ZERO(&read_fds);
         FD_SET(listening_socket, &read_fds), FD_SET(STDIN_FILENO, &read_fds);
         timespec timeout = (timespec){.tv_sec = TIMEOUT/2, .tv_nsec = 0};
 
-        WHITE << getpid() << ":: Waiting for EVENT..."; RESET2;
+        WHITE << LOG << "Waiting for EVENT..."; RESET2;
         int ready_fd = pselect(listening_socket+1, &read_fds, NULL, NULL, &timeout, &emptymask);
         if (ready_fd < 0)
         {
@@ -229,12 +229,12 @@ signed main(int argc, char* argv[])
                 interrupt = 0;
                 continue;
             } else {
-                RED << getpid() << "::"; perror("Error in Accepting Backup Nodes"); RESET1;
+                RED << LOG; perror("Error in Accepting Backup Nodes"); RESET1;
             }
         }
         if (ready_fd == 0)
         {
-            GREEN << getpid() << ":: ACCEPTED ALL BACKUP NODES... "; RESET2;
+            GREEN << LOG << "ACCEPTED ALL BACKUP NODES... "; RESET2;
             break;
         }
         if (ready_fd > 0)
@@ -245,11 +245,11 @@ signed main(int argc, char* argv[])
                                                 reinterpret_cast<sockaddr*>(&cli_addr),
                                                 &cli_len)) < 0)
                 {
-                    RED << getpid() << ":: "; perror("Error in Accepting Backup Nodes"); RESET1;
+                    RED << LOG; perror("Error in Accepting Backup Nodes"); RESET1;
                 }
                 else
                 {
-                    GREEN << getpid() << ":: BACKUP NODE @ "
+                    GREEN << LOG << "BACKUP NODE @ "
                           << inet_ntoa(cli_addr.sin_addr) << "::" << ntohs(cli_addr.sin_port); RESET2;
                     if (EMULATING) sleep(5);
                     sendInfo(connection_socket, (char*)"Registered Node");
@@ -259,7 +259,7 @@ signed main(int argc, char* argv[])
             if (FD_ISSET(STDIN_FILENO, &read_fds))
             {
                 char c; cin >> c;
-                GREEN << getpid() << ":: ACCEPTED " << backup_nodes.size() << " BACKUP NODES... "; RESET2;
+                GREEN << LOG << "ACCEPTED " << backup_nodes.size() << " BACKUP NODES... "; RESET2;
                 break;
             }
         }
@@ -268,14 +268,14 @@ signed main(int argc, char* argv[])
     bool is_failure(0), is_timeout(0);
     while(1)
     {
-        WHITE << getpid() << ":: Waiting for NEW CONNECTIONS..."; RESET2;
+        WHITE << LOG << "Waiting for NEW CONNECTIONS..."; RESET2;
         while(1)
         {
             fd_set read_fds; FD_ZERO(&read_fds);
             FD_SET(listening_socket, &read_fds), FD_SET(STDIN_FILENO, &read_fds);
             timespec timeout = (timespec){.tv_sec = TIMEOUT, .tv_nsec = 0};
 
-            WHITE << getpid() << ":: Waiting for EVENT..."; RESET2;
+            WHITE << LOG << "Waiting for EVENT..."; RESET2;
             int ready_fd = pselect(listening_socket+1, &read_fds, NULL, NULL, &timeout, &emptymask);
             if (ready_fd < 0) {
                 if (interrupt /*&& errno == EINTR*/)
@@ -288,14 +288,14 @@ signed main(int argc, char* argv[])
                 }
                 else
                 {
-                    RED << getpid() << ":: "; perror("Error in select()"); RESET1;
+                    RED << LOG; perror("Error in select()"); RESET1;
                     is_failure = 1;
                     break;
                 }
             }
             if (ready_fd == 0)
             {
-                GREEN << getpid() << ":: SERVER TIMEOUT"; RESET2;
+                GREEN << LOG << "SERVER TIMEOUT"; RESET2;
                 is_timeout = 1;
                 break;
             }
@@ -307,7 +307,7 @@ signed main(int argc, char* argv[])
                                                     reinterpret_cast<sockaddr*>(&cli_addr),
                                                     &cli_len)) < 0)
                     {
-                        RED << getpid() << ":: "; perror("Error in Accepting Incoming Connection"); RESET1
+                        RED << LOG; perror("Error in Accepting Incoming Connection"); RESET1
                     } else {
                         if (EMULATING) sleep(5);
                         break;
@@ -343,17 +343,17 @@ signed main(int argc, char* argv[])
             /* Receive Info Packet Header */
             int recv_; PacketType packet_type;
             if ((recv_ = recvType(connection_socket, packet_type)) < 0) {
-                RED << getpid() << ":: "; perror("Error in Receiving Packet Type"); RESET1
+                RED << LOG; perror("Error in Receiving Packet Type"); RESET1
                 exit(EXIT_FAILURE);
             }
             if (recv_ == 0) {
-                GREEN << getpid() << ":: CLIENT TERMINATED CONNECTION"; RESET2;
+                GREEN << LOG << "CLIENT TERMINATED CONNECTION"; RESET2;
                 close(connection_socket);
                 exit(EXIT_SUCCESS);
             }
 
             if (packet_type != PacketType::INFO) {
-                RED << getpid() << ":: INFO Packet Expected, " << packet_type << " Packet Received." ; RESET2;
+                RED << LOG << "INFO Packet Expected, " << packet_type << " Packet Received." ; RESET2;
                 close(connection_socket);
                 exit(EXIT_FAILURE);
             }
@@ -362,15 +362,15 @@ signed main(int argc, char* argv[])
             char command[INFOSIZE+1];
             bzero(command, (INFOSIZE+1) * sizeof(char));
             if (recvInfo(connection_socket, command) < 0) {
-                RED << getpid() << ":: "; perror("Error in Receiving Info Packet"); RESET1
+                RED << LOG; perror("Error in Receiving Info Packet"); RESET1
                 exit(EXIT_FAILURE);
             }
 
             if (server_modifying)
             {
-                WHITE << getpid() << ":: Server MODIFYING, Connection QUEUED.."; RESET2;
+                WHITE << LOG << "Server MODIFYING, Connection QUEUED.."; RESET2;
                 while (server_modifying) pause();
-                WHITE << getpid() << ":: Server MODIFIED, Connection STARTS."; RESET2;
+                WHITE << LOG << "Server MODIFIED, Connection STARTS."; RESET2;
             }
 
             /* Start Data Transfer by spawning Data Channel */
@@ -403,24 +403,24 @@ signed main(int argc, char* argv[])
 
                     execvp(argv[0], &argv[0]);
 
-                    RED << "execvp() has Returned"; RESET2;
+                    RED << LOG << "execvp() has Returned"; RESET2;
                     if (sendError(connection_socket, (char*)string("Server Failed").c_str()) < 0){
-                        RED << getpid() << ":: "; perror("Error in Sending Error Message"); RESET2;
+                        RED << LOG; perror("Error in Sending Error Message"); RESET2;
                     }
                     exit(EXIT_FAILURE);
                 }
                 else
                 {
-                    WHITE << getpid() << ":: STARTING DATA CHANNEL " << data_channel ; RESET2
+                    WHITE << LOG << "STARTING DATA CHANNEL " << data_channel ; RESET2
                     while(1)
                     {
                         if (server_terminate)                   /* SIGCHLD - Data Channel has Terminated */
                         {
                             if (server_success) {
-                                GREEN << getpid() << ":: DATA TRANSFER SUCCESSFUL"; RESET2;
+                                GREEN << LOG << "DATA TRANSFER SUCCESSFUL"; RESET2;
                             }
                             if (server_failure) {
-                                RED << getpid() << ":: DATA TRANSFER FAILED"; RESET2;
+                                RED << LOG << "DATA TRANSFER FAILED"; RESET2;
                             }
                             break;
                         }
@@ -435,14 +435,14 @@ signed main(int argc, char* argv[])
                             break;
                         }
 
-                        WHITE << getpid() << ":: PAUSED for SIGCHLD or SIGINT"; RESET2;
+                        WHITE << LOG << "PAUSED for SIGCHLD or SIGINT"; RESET2;
                         while(!server_terminate and !server_modifying) pause();
                     }
                     if (server_paused)
                     {
                         /* Wait for modification to get over */
                         while (server_modifying) pause();
-                        WHITE << getpid() << ":: CODE MODIFICATION ENDED"; RESET2;
+                        WHITE << LOG << "CODE MODIFICATION ENDED"; RESET2;
                     }
                 }
                 close(pipe_fd[READ]), close(pipe_fd[WRITE]);
@@ -467,6 +467,6 @@ signed main(int argc, char* argv[])
     /* Waiting for all Connection Channels to Terminate */
     while(TerminateChannel(connection_directory) == 0);
 
-    if (is_failure) {   RED << getpid() << ":: SERVER TERMINATED"; RESET2; exit(EXIT_FAILURE);}
-    if (is_timeout) { GREEN << getpid() << ":: SERVER TERMINATED"; RESET2; exit(EXIT_SUCCESS);}
+    if (is_failure) {   RED << LOG << "SERVER TERMINATED"; RESET2; exit(EXIT_FAILURE);}
+    if (is_timeout) { GREEN << LOG << "SERVER TERMINATED"; RESET2; exit(EXIT_SUCCESS);}
 }

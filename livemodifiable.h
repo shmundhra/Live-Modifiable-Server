@@ -40,6 +40,7 @@ using namespace std;
 #define FDSIZE 5
 #define BUFFSIZE 10
 
+#define LOG getpid() << ":: "
 #define BLACK   cerr << "\033[1;30m"
 #define RED     cerr << "\033[1;31m"
 #define GREEN   cerr << "\033[1;32m"

@@ -1,6 +1,6 @@
 #include "livemodifiable.h"
 
-#define BACKUP_FD 1
+#define BACKUP_FD 0
 
 static volatile sig_atomic_t interrupt(0);
 static void sig_handler(int signo)
@@ -18,9 +18,9 @@ void GET(int socket, char* file, int& offset, int pipe_fd[2], vector <pair<int, 
     /* Install Data Producer - Open File */
     int fd = open(file, O_RDONLY);
     if (fd < 0) {
-        RED << getpid() << ":: "; perror("Error in Opening File"); RESET1
+        RED << LOG; perror("Error in Opening File"); RESET1
         if (sendError(socket, (char*)string("Error in Opening File").c_str()) < 0) {
-            RED << getpid() << ":: "; perror("Error in Sending Error Message"); RESET1
+            RED << LOG; perror("Error in Sending Error Message"); RESET1
         }
         failure = 1;
         return;
@@ -32,11 +32,11 @@ void GET(int socket, char* file, int& offset, int pipe_fd[2], vector <pair<int, 
     if (!(offset < file_size))
     {
         if (sendData(socket, 0, offset, buffer) < 0) {
-            RED << getpid() << ":: "; perror("Error in Sending Data"); RESET1
+            RED << LOG; perror("Error in Sending Data"); RESET1
             failure = 1;
             return;
         } else {
-            GREEN << getpid() << ":: FILE TRANSFER already SUCCESSFUL"; RESET2;
+            GREEN << LOG << "FILE TRANSFER already SUCCESSFUL"; RESET2;
             success = 1;
             return;
         }
@@ -50,9 +50,9 @@ void GET(int socket, char* file, int& offset, int pipe_fd[2], vector <pair<int, 
         bzero(buffer, (DATASIZE+1) * sizeof(char));
         if ((read_ = read(fd, buffer, DATASIZE)) < 0)
         {
-            RED << getpid() << ":: "; perror("Error in Reading File"); RESET1
+            RED << LOG; perror("Error in Reading File"); RESET1
             if (sendError(socket, (char*)string("Error in Reading File").c_str()) < 0) {
-                RED << getpid() << ":: "; perror("Error in Sending Error Message"); RESET1
+                RED << LOG; perror("Error in Sending Error Message"); RESET1
             }
             failure = 1;
             break;
@@ -61,13 +61,13 @@ void GET(int socket, char* file, int& offset, int pipe_fd[2], vector <pair<int, 
         /* Send Produce to Client */
         if (sendData(socket, read_, offset, buffer) < 0)
         {
-            RED << getpid() << ":: "; perror("Error in Sending Data"); RESET1
+            RED << LOG; perror("Error in Sending Data"); RESET1
             failure = 1;
             break;
         }
         else if (read_ == 0)
         {
-            GREEN << getpid() << ":: File Transfer Complete"; RESET2;
+            GREEN << LOG << "File Transfer Complete"; RESET2;
             success = 1;
             break;
         }
@@ -76,7 +76,7 @@ void GET(int socket, char* file, int& offset, int pipe_fd[2], vector <pair<int, 
         /* Receive Ack from Client */
         PacketType packet_type;
         if ((recv_ = recvType(socket, packet_type)) < 0) {
-            RED << getpid() << ":: "; perror("Error in Receiving Packet Type"); RESET1
+            RED << LOG; perror("Error in Receiving Packet Type"); RESET1
             exit(EXIT_FAILURE);
         }
         switch (packet_type)
@@ -85,7 +85,7 @@ void GET(int socket, char* file, int& offset, int pipe_fd[2], vector <pair<int, 
                                         char* error_msg = (char*)calloc(ERRSIZE+1, sizeof(char));
                                         if (recvError(socket, error_msg) < 0)
                                         {
-                                            RED << getpid() << ":: "; perror("Error in Receiving Error Packet"); RESET1
+                                            RED << LOG; perror("Error in Receiving Error Packet"); RESET1
                                         }
                                         free(error_msg);
                                         failure = 1;
@@ -96,7 +96,7 @@ void GET(int socket, char* file, int& offset, int pipe_fd[2], vector <pair<int, 
                                         int next_offset;
                                         if (recvAck(socket, &next_offset) < 0)
                                         {
-                                            RED << getpid() << ":: "; perror("Error in Receiving Ack Packet"); RESET1
+                                            RED << LOG; perror("Error in Receiving Ack Packet"); RESET1
                                             failure = 1;
                                         }
                                         else
@@ -108,7 +108,7 @@ void GET(int socket, char* file, int& offset, int pipe_fd[2], vector <pair<int, 
                                         break;
                                     }
 
-            default: RED << getpid() << ":: Unexpected PacketType"; RESET2;
+            default: RED << LOG << "Unexpected PacketType"; RESET2;
         }
         sleep(1);
     }
@@ -120,7 +120,7 @@ void GET(int socket, char* file, int& offset, int pipe_fd[2], vector <pair<int, 
 void PUT(int socket, char* file, int& offset, int pipe_fd[2], vector <pair<int, sockaddr_in>> const& backup_nodes)
 {
     int backup_socket; sockaddr_in node_addr;
-    if (!backup_nodes.empty()) {
+    if (BACKUP_FD < backup_nodes.size()) {
         /* Install Data Consumer */
         backup_socket = backup_nodes[BACKUP_FD].first;
         node_addr = backup_nodes[BACKUP_FD].second;
@@ -136,7 +136,7 @@ void PUT(int socket, char* file, int& offset, int pipe_fd[2], vector <pair<int, 
     {
         /* Send ACK Request of Data at offset to Client */
         if (sendAck(socket, offset) < 0){
-            RED << getpid() << ":: "; perror("Error in Sending Ack Packet");
+            RED << LOG; perror("Error in Sending Ack Packet");
             failure = 1;
             return;
         }
@@ -144,12 +144,12 @@ void PUT(int socket, char* file, int& offset, int pipe_fd[2], vector <pair<int, 
         /* Receive Data from Client */
         PacketType packet_type;
         if ((recv_ = recvType(socket, packet_type)) < 0) {
-            RED << getpid() << ":: "; perror("Error in Receiving Packet Type"); RESET1
+            RED << LOG; perror("Error in Receiving Packet Type"); RESET1
             failure = 1;
             return;
         }
         if (recv_ == 0) {
-            GREEN << getpid() << ":: CLIENT TERMINATED CONNECTION"; RESET2;
+            GREEN << LOG << "CLIENT TERMINATED CONNECTION"; RESET2;
             failure = 1;
             return;
         }
@@ -160,7 +160,7 @@ void PUT(int socket, char* file, int& offset, int pipe_fd[2], vector <pair<int, 
                                         char* error_msg = (char*)calloc(ERRSIZE+1, sizeof(char));
                                         if (recvError(socket, error_msg) < 0)
                                         {
-                                            RED << getpid() << ":: "; perror("Error in Receiving Error Packet"); RESET1
+                                            RED << LOG; perror("Error in Receiving Error Packet"); RESET1
                                         }
                                         free(error_msg);
                                         failure = 1;
@@ -172,23 +172,23 @@ void PUT(int socket, char* file, int& offset, int pipe_fd[2], vector <pair<int, 
                                         char* data = (char*)calloc(DATASIZE+1, sizeof(char));
                                         if ((recv_ = recvData(socket, &recv_offset, data)) < 0)
                                         {
-                                            RED << getpid() << ":: "; perror("Error in Receiving Data Packet"); RESET1
+                                            RED << LOG; perror("Error in Receiving Data Packet"); RESET1
                                             failure = 1;
                                             break;
                                         }
                                         if (recv_ == 0) {
-                                            GREEN << getpid() << ":: FILE TRANSFER is COMPLETE"; RESET2;
+                                            GREEN << LOG << "FILE TRANSFER is COMPLETE"; RESET2;
                                             success = 1;
                                             break;
                                         }
 
-                                        if (!backup_nodes.empty()) {
+                                        if (BACKUP_FD < backup_nodes.size()) {
                                             /* Consume the Produce Received */
                                             if ((consume = sendBackupData(backup_socket, Data(recv_, recv_offset, data), getppid())) < 0)
                                             {
-                                                RED << getpid() << ":: "; perror("Error in Sending Backup"); RESET1
+                                                RED << LOG; perror("Error in Sending Backup"); RESET1
                                                 if (sendError(socket, (char*)string("Error in Sending Backup").c_str()) < 0) {
-                                                    RED << getpid() << ":: "; perror("Error in Sending Error Message"); RESET1
+                                                    RED << LOG; perror("Error in Sending Error Message"); RESET1
                                                 }
                                                 failure = 1;
                                                 return;
@@ -200,7 +200,7 @@ void PUT(int socket, char* file, int& offset, int pipe_fd[2], vector <pair<int, 
                                         break;
                                     }
 
-            default: RED << getpid() << ":: Unexpected PacketType"; RESET2;
+            default: RED << LOG << "Unexpected PacketType"; RESET2;
         }
         sleep(1);
     }
@@ -225,13 +225,13 @@ signed main(int argc, char* argv[])
     char filename[FILESIZE+1];
     bzero(filename, (FILESIZE+1)*sizeof(char));
     sscanf(argv[2], "%s %s", action, filename);
-    BLUE << getpid() << ":: ACTION RECEIVED by Server: " << action; RESET2;
-    BLUE << getpid() << ":: FILENAME RECEIVED by Server: " << filename; RESET2;
+    BLUE << LOG << "ACTION RECEIVED by Server: " << action; RESET2;
+    BLUE << LOG << "FILENAME RECEIVED by Server: " << filename; RESET2;
 
     /* Extract Offset from where to start File, from 3rd CLA */
     int offset;
     sscanf(argv[3], "%d", &offset);
-    BLUE << getpid() << ":: OFFSET RECEIVED by Server: " << offset; RESET2;
+    BLUE << LOG << "OFFSET RECEIVED by Server: " << offset; RESET2;
 
     /* Extract Pipe File Descriptors to send offset to Parent on Pausing */
     int pipefd[2];
@@ -256,7 +256,7 @@ signed main(int argc, char* argv[])
     if(interrupt == 1 and success != 1 and failure != 1)
     {
         if (sendInfo(socket, (char*)string("Modification Taking Place...").c_str()) < 0) {
-            RED << getpid() << ":: "; perror("Error in Sending Modification Start Message"); RESET1
+            RED << LOG; perror("Error in Sending Modification Start Message"); RESET1
             failure = 1;
         }
 

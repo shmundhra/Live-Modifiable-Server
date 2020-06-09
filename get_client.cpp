@@ -26,21 +26,21 @@ signed main(int argc, char* argv[])
 
     int socket_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (socket_fd < 0) {
-        RED << getpid() << ":: "; perror("Error in Creating Connection Socket"); RESET1
+        RED << LOG; perror("Error in Creating Connection Socket"); RESET1
         exit(EXIT_FAILURE);
     }
 
     sockaddr_in serv_addr = {AF_INET, htons(PORT), inet_addr(IP_ADDRESS.c_str()), sizeof(sockaddr_in)};
     if (connect(socket_fd, reinterpret_cast<sockaddr*>(&serv_addr), sizeof(serv_addr)) < 0) {
-        RED << getpid() << ":: "; perror("Error in Connecting to TCP Server"); RESET1
+        RED << LOG; perror("Error in Connecting to TCP Server"); RESET1
         exit(EXIT_FAILURE);
     }
     if (EMULATING) sleep(5);
-    GREEN << getpid() << ":: CONNECTED to SERVER..."; RESET2;
+    GREEN << LOG << "CONNECTED to SERVER..."; RESET2;
 
     string Command("GET " + FileName);
     if (sendInfo(socket_fd, (char*)Command.c_str()) < 0) {
-        RED << getpid() << ":: "; perror("Error in Sending Command to Server"); RESET1
+        RED << LOG; perror("Error in Sending Command to Server"); RESET1
         exit(EXIT_FAILURE);
     }
 
@@ -50,11 +50,11 @@ signed main(int argc, char* argv[])
         WHITE << "WAITING for Packet..."; RESET2;
         PacketType packet_type;
         if ((recv_ = recvType(socket_fd, packet_type)) < 0) {
-            RED << getpid() << ":: "; perror("Error in Receiving Packet Type"); RESET1
+            RED << LOG; perror("Error in Receiving Packet Type"); RESET1
             exit(EXIT_FAILURE);
         }
         if (recv_ == 0) {
-            GREEN << getpid() << ":: SERVER TERMINATED CONNECTION"; RESET2;
+            GREEN << LOG << "SERVER TERMINATED CONNECTION"; RESET2;
             break;
         }
 
@@ -64,7 +64,7 @@ signed main(int argc, char* argv[])
                                         char* error_msg = (char*)calloc(ERRSIZE+1, sizeof(char));
                                         if (recvError(socket_fd, error_msg) < 0)
                                         {
-                                            RED << getpid() << ":: "; perror("Error in Receiving Error Packet"); RESET1
+                                            RED << LOG; perror("Error in Receiving Error Packet"); RESET1
                                             exit(EXIT_FAILURE);
                                         }
                                         free(error_msg);
@@ -75,7 +75,7 @@ signed main(int argc, char* argv[])
                                         char* info_msg = (char*)calloc(INFOSIZE+1, sizeof(char));
                                         if (recvInfo(socket_fd, info_msg) < 0)
                                         {
-                                            RED << getpid() << ":: "; perror("Error in Receiving Info Packet"); RESET1
+                                            RED << LOG; perror("Error in Receiving Info Packet"); RESET1
                                             exit(EXIT_FAILURE);
                                         }
                                         free(info_msg);
@@ -88,7 +88,7 @@ signed main(int argc, char* argv[])
                                         char* data = (char*)calloc(DATASIZE+1, sizeof(char));
                                         if ((recv_ = recvData(socket_fd, &offset, data)) < 0)
                                         {
-                                            RED << getpid() << ":: "; perror("Error in Receiving Data Packet"); RESET1
+                                            RED << LOG; perror("Error in Receiving Data Packet"); RESET1
                                             exit(EXIT_FAILURE);
                                         }
                                         if (recv_ == 0) {
@@ -103,7 +103,7 @@ signed main(int argc, char* argv[])
 
                                         /* Send ACK of Consumption */
                                         if (sendAck(socket_fd, next_offset) < 0){
-                                            RED << getpid() << ":: "; perror("Error in Sending Ack Packet");
+                                            RED << LOG; perror("Error in Sending Ack Packet");
                                             exit(EXIT_FAILURE);
                                         }
                                         break;
