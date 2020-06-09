@@ -239,9 +239,9 @@ signed main(int argc, char* argv[])
     vector <pair<int, sockaddr_in>> backup_nodes;
     for (int i = 0; i < backupfd_num; i++)
     {
-        int fd; sockaddr node_addr;
-        sscanf(argv[6+i], "%d-%hu-%s", &fd, &node_addr.sa_family, node_addr.sa_data);
-        backup_nodes.push_back({fd, *(sockaddr_in*)&node_addr});
+        int fd; sockaddr_in node_addr;
+        sscanf(argv[6+i], "%d-%hu-%hu-%u", &fd, &node_addr.sin_family, &node_addr.sin_port, &node_addr.sin_addr.s_addr);
+        backup_nodes.push_back({fd, node_addr});
     }
 
     if (!strcmp(action, "GET")) GET(socket, filename, offset, pipefd, backup_nodes);

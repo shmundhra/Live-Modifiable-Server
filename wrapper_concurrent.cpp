@@ -152,9 +152,10 @@ vector <char*> BackupBuffer(vector<pair<int, sockaddr_in>> const& backup_nodes)
     for(int i = 0; i < backup_nodes.size(); i++)
     {
         int fd = backup_nodes[i].first;
-        sockaddr node_addr = *(sockaddr*)&backup_nodes[i].second;
-        char* buffer = (char*)calloc(FDSIZE + FDSIZE + sizeof(sockaddr) + 1, sizeof(char));
-        snprintf(buffer, FDSIZE + FDSIZE + sizeof(sockaddr) + 1, "%d-%hu-%s", fd, node_addr.sa_family, node_addr.sa_data);
+        sockaddr_in node_addr = backup_nodes[i].second;
+        char* buffer = (char*)calloc(FDSIZE + FDSIZE + FDSIZE + BUFFSIZE + 1, sizeof(char));
+        snprintf(buffer,FDSIZE + FDSIZE + FDSIZE + BUFFSIZE + 1, "%d-%hu-%hu-%u", 
+                        fd, node_addr.sin_family, node_addr.sin_port, node_addr.sin_addr.s_addr);
         backup_buffers.push_back(buffer);
     }
     return backup_buffers;
@@ -336,8 +337,8 @@ signed main(int argc, char* argv[])
             }
 
             if (packet_type != PacketType::INFO) {
-                RED << getpid() << ":: INFO Packet Expected, "
-                    << packet_type << " Packet Received." ; RESET2;
+                RED << getpid() << ":: INFO Packet Expected, " << packet_type << " Packet Received." ; RESET2;
+                close(connection_socket);
                 exit(EXIT_FAILURE);
             }
 
@@ -379,7 +380,9 @@ signed main(int argc, char* argv[])
                                             (char*)(to_string(backup_nodes.size()).c_str())
                                         };
                     vector<char*> backup_info = BackupBuffer(backup_nodes);
-                    for (auto buffer: backup_info) argv.push_back(buffer);
+                    for (auto buffer: backup_info) {
+                        argv.push_back(buffer);
+                    }
                     argv.push_back((char*)NULL);
 
                     execvp(argv[0], &argv[0]);
