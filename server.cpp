@@ -119,14 +119,17 @@ void GET(int socket, char* file, int& offset, int pipe_fd[2], vector <pair<int, 
 
 void PUT(int socket, char* file, int& offset, int pipe_fd[2], vector <pair<int, sockaddr_in>> const& backup_nodes)
 {
-    /* Install Data Consumer */
-    int backup_socket = backup_nodes[BACKUP_FD].first;
-    sockaddr_in node_addr = backup_nodes[BACKUP_FD].second;
+    int backup_socket; sockaddr_in node_addr;
+    if (!backup_nodes.empty()) {
+        /* Install Data Consumer */
+        backup_socket = backup_nodes[BACKUP_FD].first;
+        node_addr = backup_nodes[BACKUP_FD].second;
 
-    string Command("PUT " + string(file));
-    sendBackupInfo(backup_socket, (char*)(Command.c_str()), getppid());
-    GREEN << getppid() << ":: " << "SENDING BACKUP to NODE @ "
-          << inet_ntoa(node_addr.sin_addr) << "::" << ntohs(node_addr.sin_port); RESET2;
+        string Command("PUT " + string(file));
+        sendBackupInfo(backup_socket, (char*)(Command.c_str()), getppid());
+        GREEN << getppid() << ":: " << "SENDING BACKUP to NODE @ "
+              << inet_ntoa(node_addr.sin_addr) << "::" << ntohs(node_addr.sin_port); RESET2;
+    }
 
     int recv_, consume;
     while(!failure and !success and !interrupt)
@@ -179,17 +182,19 @@ void PUT(int socket, char* file, int& offset, int pipe_fd[2], vector <pair<int, 
                                             break;
                                         }
 
-                                        /* Consume the Produce Received */
-                                        if ((consume = sendBackupData(backup_socket, Data(recv_, recv_offset, data), getppid())) < 0)
-                                        {
-                                            RED << getpid() << ":: "; perror("Error in Sending Backup"); RESET1
-                                            if (sendError(socket, (char*)string("Error in Sending Backup").c_str()) < 0) {
-                                                RED << getpid() << ":: "; perror("Error in Sending Error Message"); RESET1
+                                        if (!backup_nodes.empty()) {
+                                            /* Consume the Produce Received */
+                                            if ((consume = sendBackupData(backup_socket, Data(recv_, recv_offset, data), getppid())) < 0)
+                                            {
+                                                RED << getpid() << ":: "; perror("Error in Sending Backup"); RESET1
+                                                if (sendError(socket, (char*)string("Error in Sending Backup").c_str()) < 0) {
+                                                    RED << getpid() << ":: "; perror("Error in Sending Error Message"); RESET1
+                                                }
+                                                failure = 1;
+                                                return;
                                             }
-                                            failure = 1;
-                                            return;
                                         }
-                                        offset = recv_offset + consume;
+                                        offset = recv_offset + recv_;
 
                                         free(data);
                                         break;

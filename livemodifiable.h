@@ -19,7 +19,19 @@
 #include <bits/stdc++.h>
 using namespace std;
 
+// ------------------------CHANGE ACCORDING TO USE --------------------
+#define IP_ADDR "10.0.0.1"
 #define PORT 10000
+#define EMULATING 1
+// --------------------------------------------------------------------
+
+// --------------------- ENSURE MULTIPLE OF 4 -------------------------
+#define ERRSIZE 52
+#define INFOSIZE 52
+#define FILESIZE 52
+#define DATASIZE 200
+// --------------------------------------------------------------------
+
 #define SIGMODIFY SIGUSR1
 #define TIMEOUT 600
 #define EXIT_PAUSED 10
@@ -27,10 +39,6 @@ using namespace std;
 #define WRITE 1
 #define FDSIZE 5
 #define BUFFSIZE 10
-#define ERRSIZE 52
-#define INFOSIZE 52
-#define FILESIZE 52
-#define DATASIZE 200
 
 #define BLACK   cerr << "\033[1;30m"
 #define RED     cerr << "\033[1;31m"

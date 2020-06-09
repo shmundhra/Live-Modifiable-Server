@@ -45,6 +45,8 @@ static void par_sig_handler(int signo)
     }
 }
 
+/* Creates a TCP Socket and sets the socket level options to Reuse Address and Port */
+/* Returns -1 on Error and socket_fd value on Success */
 int CreateSocket()
 {
     int socket_fd;
@@ -64,9 +66,11 @@ int CreateSocket()
     return socket_fd;
 }
 
+/* Binds the TCP Socket (Param1) to IP_ADDR::PORT(Param2) */
+/* Returns -1 on Error and 0 on Success */
 int BindSocket(int socket, sockaddr_in& server_addr)
 {
-    server_addr = {AF_INET, htons(PORT), inet_addr("10.0.0.1"), sizeof(sockaddr_in)};
+    server_addr = {AF_INET, htons(PORT), inet_addr(IP_ADDR), sizeof(sockaddr_in)};
     server_addr.sin_addr.s_addr = INADDR_ANY;
     if (bind(socket, reinterpret_cast<struct sockaddr *>(&server_addr), sizeof(server_addr)) < 0) {
         RED << getpid() << ":: "; perror("Error in binding Listening Socket"); RESET1
@@ -75,6 +79,8 @@ int BindSocket(int socket, sockaddr_in& server_addr)
     return 0;
 }
 
+/* Reaps a Terminated Child's status and removes from directory (Param1) */
+/* Returns 0 if a Child Terminated, -1 if all Children Terminated */
 int TerminateChannel(map <pid_t, sockaddr_in>& directory)
 {
     pid_t channel_pid = wait(NULL);
@@ -87,6 +93,8 @@ int TerminateChannel(map <pid_t, sockaddr_in>& directory)
     return 0;
 }
 
+/* Blocks signo (Param1) Signal */
+/* Returns -1 on Error, 0 on Success */
 int BlockSignal(int signo)
 {
     sigset_t sigmask; sigemptyset(&sigmask); sigaddset(&sigmask, signo);
@@ -97,6 +105,8 @@ int BlockSignal(int signo)
     return 0;
 }
 
+/* Unblocks signo (Param1) Signal */
+/* Returns -1 on Error, 0 on Success */
 int UnblockSignal(int signo)
 {
     sigset_t sigmask; sigemptyset(&sigmask); sigaddset(&sigmask, signo);
@@ -107,6 +117,8 @@ int UnblockSignal(int signo)
     return 0;
 }
 
+/* Unblocks All Signals */
+/* Returns -1 on Error, 0 on Success */
 int UnblockAllSignal()
 {
     sigset_t emptymask; sigemptyset(&emptymask);
@@ -117,6 +129,8 @@ int UnblockAllSignal()
     return 0;
 }
 
+/* Sends Signal to data_channel (Param1) */
+/* Receives Offset (Param3) through pipe_fd[] (Param2) */
 int HandleModification(pid_t data_channel, int pipe_fd[2], int* offset)
 {
     WHITE << data_channel << ":: CODE MODIFICATION STARTED" << endl ;
@@ -132,20 +146,22 @@ int HandleModification(pid_t data_channel, int pipe_fd[2], int* offset)
     sscanf(offset_str, "%d", offset);
 }
 
-int HandleTermination(pid_t data_channel, int offset, sig_atomic_t success,
-                      sig_atomic_t failure, sig_atomic_t paused)
+/* Handles the Appropriate Prompts after Termination of data_channel (Param1) */
+int HandleTermination(pid_t data_channel, int offset)
 {
-    if (success){
+    if (server_success){
         GREEN << data_channel << ":: DATA CHANNEL TERMINATION SUCCESSFUL"; RESET2;
     }
-    if (failure){
+    if (server_failure){
         RED << data_channel << ":: DATA CHANNEL FAILED"; RESET2;
     }
-    if (paused){
+    if (server_paused){
         BLUE << getpid() << ":: RECEIVED " << offset << " from DATA CHANNEL " << data_channel; RESET2;
     }
 }
 
+/* Creates a Vector of Char Arrays with Each Array holding Information for a Backup Node */
+/* Returns Compressed Backup Node Information */
 vector <char*> BackupBuffer(vector<pair<int, sockaddr_in>> const& backup_nodes)
 {
     vector<char*>backup_buffers;
@@ -235,7 +251,7 @@ signed main(int argc, char* argv[])
                 {
                     GREEN << getpid() << ":: BACKUP NODE @ "
                           << inet_ntoa(cli_addr.sin_addr) << "::" << ntohs(cli_addr.sin_port); RESET2;
-                    sleep(5);
+                    if (EMULATING) sleep(5);
                     sendInfo(connection_socket, (char*)"Registered Node");
                     backup_nodes.push_back({connection_socket, cli_addr});
                 }
@@ -293,7 +309,7 @@ signed main(int argc, char* argv[])
                     {
                         RED << getpid() << ":: "; perror("Error in Accepting Incoming Connection"); RESET1
                     } else {
-                        sleep(5);
+                        if (EMULATING) sleep(5);
                         break;
                     }
                 }
@@ -415,7 +431,7 @@ signed main(int argc, char* argv[])
                             /* Waiting for Data Channel to terminate */
                             while(!server_terminate) pause();
 
-                            HandleTermination(data_channel, offset, server_success, server_failure, server_paused);
+                            HandleTermination(data_channel, offset);
                             break;
                         }
 
